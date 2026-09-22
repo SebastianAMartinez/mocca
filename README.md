@@ -1,12 +1,12 @@
 # Mocca
 
-Mocca is a private mobile app for two people to share notes, photos, and small moments. The first goal is a reliable app that works well on both phones. More advanced features will be added only when the core product is stable.
+Mocca is a personal mobile app for two people to share notes, photos, and small moments. The source code is public, but the application and its data are intended for its two users. The first goal is a reliable app that works well on both phones. More advanced features will be added only when the core product is stable.
 
 The project is also a practical exercise in building and operating a production-style TypeScript application without adding infrastructure before it is needed.
 
 ## Current Status
 
-Mocca is in the `v0.1` foundation phase. The monorepo, shared TypeScript configuration, Biome checks, CI workflow, conventional commit checks, and Changesets configuration are in place. The application workspaces have not been initialized yet.
+Mocca is in the `v0.1` foundation phase. The monorepo, shared TypeScript configuration, Biome checks, CI workflow, conventional commit checks, Changesets configuration, and protected `main` branch are in place. The application workspaces have not been initialized yet.
 
 ## Architecture
 
@@ -111,6 +111,14 @@ Available root commands:
 | `pnpm release` | Publish versioned packages when publishing is configured |
 
 There is no application start command yet because the mobile and server workspaces are still empty.
+
+## Branch Workflow
+
+`main` is the only long-lived branch. Changes are developed on short-lived branches named for their purpose, such as `feat/expo-mobile`, `fix/note-authorization`, or `chore/update-tooling`.
+
+Open a pull request into `main` for each focused change. The branch must be current with `main`, and the repository checks must pass before merging. Pull requests are squash merged, and GitHub deletes merged branches automatically.
+
+Direct pushes, force pushes, and deletion of `main` are blocked. Approvals are not required while this remains a single-developer project.
 
 ## Commits and Releases
 
