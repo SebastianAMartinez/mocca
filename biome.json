@@ -1,5 +1,8 @@
 {
 	"$schema": "https://biomejs.dev/schemas/2.5.14/schema.json",
+	"files": {
+		"includes": ["**", "!**/.agents", "!**/assets"]
+	},
 	"formatter": {
 		"enabled": true
 	},
@@ -8,5 +11,10 @@
 		"rules": {
 			"preset": "recommended"
 		}
+	},
+	"vcs": {
+		"enabled": true,
+		"clientKind": "git",
+		"useIgnoreFile": true
 	}
 }
