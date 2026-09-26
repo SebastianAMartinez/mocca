@@ -6,7 +6,7 @@ The project is also a practical exercise in building and operating a production-
 
 ## Current Status
 
-Mocca is in the `v0.1` foundation phase. The monorepo, shared TypeScript configuration, Biome checks, CI workflow, conventional commit checks, Changesets configuration, protected `main` branch, Expo mobile app, and Fastify/tRPC server are in place. The database package is being initialized; the shared package remains a placeholder.
+Mocca is in the `v0.1` foundation phase. The monorepo, root tooling, CI workflow, Expo app, and Fastify/tRPC server are in place. The Drizzle database package now defines the Better Auth schema, and its migration has been applied to local PostgreSQL. Server-side Better Auth is configured for Google and Apple, with the server using a dedicated least-privilege database role. The shared package remains a placeholder. A repeatable Compose stack, SeaweedFS, Expo sign-in, production deployment, and backup/restore processes are still outstanding.
 
 ## Architecture
 
@@ -23,7 +23,7 @@ React Native/Expo
   PostgreSQL
 ```
 
-Better Auth will provide self-hosted authentication with Google and Apple social sign-in. Authorization remains the responsibility of the Fastify server. A user may access content only when they belong to the shared space that owns it. PostgreSQL and SeaweedFS will use persistent storage and require tested backups and restores.
+Better Auth is configured on the server for Google and Apple social sign-in; the Expo client flow is not yet integrated. Authorization remains the responsibility of the Fastify server. A user may access content only when they belong to the shared space that owns it. PostgreSQL and SeaweedFS will use persistent storage and require tested backups and restores.
 
 ### Infrastructure decisions
 
@@ -77,7 +77,7 @@ Each workspace should contain only code that belongs to its stated responsibilit
 
 - pnpm workspaces
 - Biome
-- Vitest
+- Node.js `node:test`
 - React Native Testing Library
 - Changesets
 - Husky and Commitlint
@@ -171,17 +171,19 @@ The roadmap is ordered by product value and dependency. Later phases may change 
 
 Establish the project structure and deployment foundation.
 
-- Configure the pnpm monorepo and root development tools
-- Initialize the Expo mobile application
-- Initialize the Fastify server and tRPC API
-- Create the shared and database packages
-- Start the Drizzle schema
-- Provision the self-hosted server and configure its firewall and access
-- Define the Docker Compose services, networks, volumes, and environment variables
-- Deploy Fastify, PostgreSQL, and SeaweedFS behind Caddy
-- Integrate Better Auth with Google and Apple social sign-in
-- Define and test PostgreSQL and SeaweedFS backup and restore processes
-- Connect the GitHub repository and verify CI
+- [x] Configure the pnpm monorepo and root development tools
+- [x] Initialize the Expo mobile application
+- [x] Initialize the Fastify server and tRPC API
+- [x] Create the Drizzle database package and define the Better Auth schema
+- [ ] Implement the shared package
+- [x] Apply the auth migration to local PostgreSQL and configure the server's least-privilege runtime role
+- [ ] Provision the self-hosted server and configure its firewall and access
+- [ ] Define the Docker Compose services, networks, volumes, and environment variables
+- [ ] Deploy Fastify, PostgreSQL, and SeaweedFS behind Caddy
+- [x] Configure server-side Better Auth providers for Google and Apple
+- [ ] Connect the Expo app to the server and complete an end-to-end sign-in flow
+- [ ] Define and test PostgreSQL and SeaweedFS backup and restore processes
+- [x] Connect the GitHub repository and verify CI
 
 ### v0.2: MVP
 

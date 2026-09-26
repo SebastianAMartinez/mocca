@@ -9,14 +9,14 @@
 		"scheme": "mocca",
 		"userInterfaceStyle": "automatic",
 		"ios": {
-			"bundleIdentifier": "com.sebastianmartinez.mocca",
+			"bundleIdentifier": "com.sebastianamartinez.mocca",
 			"icon": "./assets/expo.icon",
 			"infoPlist": {
 				"ITSAppUsesNonExemptEncryption": false
 			}
 		},
 		"android": {
-			"package": "com.sebastianmartinez.mocca",
+			"package": "com.sebastianamartinez.mocca",
 			"adaptiveIcon": {
 				"backgroundColor": "#E6F4FE",
 				"foregroundImage": "./assets/images/android-icon-foreground.png",

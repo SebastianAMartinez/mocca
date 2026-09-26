@@ -1,0 +1,29 @@
+{
+	"name": "@mocca/db",
+	"version": "0.0.0",
+	"private": true,
+	"description": "Database module for the Mocca app",
+	"exports": {
+		".": "./src/index.ts"
+	},
+	"scripts": {
+		"typecheck": "tsc -p tsconfig.json --noEmit",
+		"db:generate": "drizzle-kit generate --config drizzle.config.ts",
+		"db:migrate": "drizzle-kit migrate --config drizzle.config.ts"
+	},
+	"keywords": [],
+	"author": "Sebastian A. Martinez",
+	"license": "ISC",
+	"type": "module",
+	"dependencies": {
+		"drizzle-orm": "1.0.0-rc.4",
+		"pg": "^8.23.0"
+	},
+	"devDependencies": {
+		"@types/pg": "^8.23.1",
+		"dotenv": "^18.0.4",
+		"drizzle-kit": "1.0.0-rc.4",
+		"tsx": "^4.23.15",
+		"typescript": "^7.0.2"
+	}
+}
