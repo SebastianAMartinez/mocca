@@ -6,7 +6,7 @@ The project is also a practical exercise in building and operating a production-
 
 ## Current Status
 
-Mocca is in the `v0.1` foundation phase. The monorepo, shared TypeScript configuration, Biome checks, CI workflow, conventional commit checks, Changesets configuration, and protected `main` branch are in place. The application workspaces have not been initialized yet.
+Mocca is in the `v0.1` foundation phase. The monorepo, shared TypeScript configuration, Biome checks, CI workflow, conventional commit checks, Changesets configuration, protected `main` branch, Expo mobile app, and Fastify/tRPC server are in place. The shared and database packages are currently placeholders.
 
 ## Architecture
 
@@ -110,7 +110,19 @@ Available root commands:
 | `pnpm version-packages` | Apply pending changesets and update changelogs |
 | `pnpm release` | Publish versioned packages when publishing is configured |
 
-There is no application start command yet because the mobile and server workspaces are still empty.
+The mobile and server workspaces can be started independently with the commands below.
+
+Start the server in development mode:
+
+```bash
+pnpm --filter @mocca/server dev
+```
+
+Start the Expo development server:
+
+```bash
+pnpm --filter @mocca/mobile start
+```
 
 ## Branch Workflow
 
