@@ -5,21 +5,26 @@
 	"type": "module",
 	"scripts": {
 		"build": "tsc -p tsconfig.json",
-		"dev": "tsx watch src/server.ts",
-		"start": "node dist/server.js",
-		"test": "vitest run",
-		"test:watch": "vitest",
+		"dev": "tsx watch --env-file=.env src/server.ts",
+		"start": "node --env-file-if-exists=.env dist/server.js",
+		"test": "node --import tsx --test tests/*.test.ts",
+		"test:watch": "node --import tsx --test --watch tests/*.test.ts",
 		"typecheck": "tsc -p tsconfig.json --noEmit"
 	},
 	"dependencies": {
+		"@better-auth/drizzle-adapter": "^1.7.6",
+		"@fastify/cors": "^11.3.0",
+		"@fastify/formbody": "^9.0.0",
+		"@mocca/db": "workspace:*",
 		"@trpc/server": "^11.19.0",
+		"better-auth": "^1.7.6",
 		"fastify": "^5.12.5",
+		"jose": "^6.2.12",
 		"zod": "^4.6.5"
 	},
 	"devDependencies": {
 		"@types/node": "^24.13.6",
 		"tsx": "^4.23.15",
-		"typescript": "^7.0.2",
-		"vitest": "^4.1.11"
+		"typescript": "^7.0.2"
 	}
 }
