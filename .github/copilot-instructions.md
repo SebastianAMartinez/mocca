@@ -9,9 +9,9 @@ The project is structured as a pnpm monorepo and will eventually contain:
 * React Native / Expo mobile application
 * Fastify backend
 * tRPC API layer
-* PostgreSQL database hosted by Supabase
+* Self-hosted PostgreSQL database
 * Drizzle ORM
-* Clerk authentication
+* Better Auth authentication with Google and Apple social sign-in
 * Shared TypeScript packages
 * iOS widgets
 * Automated testing and CI
@@ -87,7 +87,7 @@ Responsible for:
 * Database migrations
 * Database-related utilities
 
-PostgreSQL will be hosted by Supabase.
+PostgreSQL will be self-hosted with Docker Compose.
 
 Do not place UI or API route logic here.
 
@@ -180,10 +180,10 @@ React Native / Expo
      Drizzle
         │
         ▼
-Supabase PostgreSQL
+Self-hosted PostgreSQL
 ```
 
-Authentication will use Clerk.
+Authentication will use Better Auth with Google and Apple social sign-in.
 
 Authentication and authorization are separate concerns.
 
