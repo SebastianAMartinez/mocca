@@ -1,32 +1,39 @@
 # Mocca
 
-Mocca is a personal mobile app for two people to share notes, photos, and small moments. The source code is public, but the application and its data are intended for its two users. The first goal is a reliable app that works well on both phones. More advanced features will be added only when the core product is stable.
+Mocca is a mobile app to share notes, photos, and small moments. The first goal is a reliable app that works well on both phones. More advanced features will be added only when the core product is stable.
 
-The project is also a practical exercise in building and operating a production-style TypeScript application without adding infrastructure before it is needed.
+The project is also a practical exercise in building and operating a production-style TypeScript application while introducing infrastructure deliberately and learning to operate it responsibly.
 
 ## Current Status
 
-Mocca is in the `v0.1` foundation phase. The monorepo, shared TypeScript configuration, Biome checks, CI workflow, conventional commit checks, Changesets configuration, protected `main` branch, Expo mobile app, and Fastify/tRPC server are in place. The shared and database packages are currently placeholders.
+Mocca is in the `v0.1` foundation phase. The monorepo, shared TypeScript configuration, Biome checks, CI workflow, conventional commit checks, Changesets configuration, protected `main` branch, Expo mobile app, and Fastify/tRPC server are in place. The database package is being initialized; the shared package remains a placeholder.
 
 ## Architecture
 
 ```text
-React Native / Expo
+React Native/Expo
+        |
+      Caddy
         |
         v
-      tRPC
-        |
-        v
-     Fastify
-        |
-        v
-     Drizzle
-        |
-        v
-Supabase PostgreSQL
+  Fastify + tRPC
+      |     |
+  Drizzle  SeaweedFS
+      |
+  PostgreSQL
 ```
 
-Clerk will provide authentication. Authorization remains the responsibility of the Fastify server. A user may access content only when they belong to the shared space that owns it.
+Better Auth will provide self-hosted authentication with Google and Apple social sign-in. Authorization remains the responsibility of the Fastify server. A user may access content only when they belong to the shared space that owns it. PostgreSQL and SeaweedFS will use persistent storage and require tested backups and restores.
+
+### Infrastructure decisions
+
+- Mocca will be self-hosted on a VPS or dedicated server.
+- Docker Compose will define the application, Caddy, PostgreSQL, and SeaweedFS services, networks, and persistent volumes.
+- Caddy will be the reverse proxy and HTTPS entry point in production. Public DNS and ports 80 and 443 must be configured for automated certificates.
+- HTTPS is a deployment concern rather than a separate application service. Caddy terminates public TLS and forwards requests to Fastify over the private Docker network; local development may use plain HTTP.
+- PostgreSQL will store relational data, and SeaweedFS will provide S3-compatible object storage for photos.
+- Database and object-storage backups, restore testing, upgrades, and server security are part of the deployment responsibility.
+- Server-Sent Events may provide real-time updates to the mobile app later. iOS widgets will use operating-system-managed refreshes rather than persistent connections.
 
 ## Repository Structure
 
@@ -61,10 +68,10 @@ Each workspace should contain only code that belongs to its stated responsibilit
 
 ### Data and authentication
 
-- PostgreSQL on Supabase
+- Self-hosted PostgreSQL
 - Drizzle ORM
-- Supabase Storage
-- Clerk
+- SeaweedFS for S3-compatible object storage
+- Better Auth with Google and Apple social sign-in
 
 ### Tooling and infrastructure
 
@@ -75,8 +82,9 @@ Each workspace should contain only code that belongs to its stated responsibilit
 - Changesets
 - Husky and Commitlint
 - GitHub Actions
-- Railway
 - Sentry
+- Docker Compose
+- Caddy
 
 ## Development
 
@@ -168,9 +176,11 @@ Establish the project structure and deployment foundation.
 - Initialize the Fastify server and tRPC API
 - Create the shared and database packages
 - Start the Drizzle schema
-- Configure Supabase development and production projects
-- Integrate Clerk authentication
-- Configure Railway
+- Provision the self-hosted server and configure its firewall and access
+- Define the Docker Compose services, networks, volumes, and environment variables
+- Deploy Fastify, PostgreSQL, and SeaweedFS behind Caddy
+- Integrate Better Auth with Google and Apple social sign-in
+- Define and test PostgreSQL and SeaweedFS backup and restore processes
 - Connect the GitHub repository and verify CI
 
 ### v0.2: MVP
@@ -192,7 +202,7 @@ Build the smallest useful version of Mocca and install it on both phones.
 
 #### Photos
 
-- Upload photos to Supabase Storage
+- Upload photos to SeaweedFS using signed object-storage URLs
 - View uploaded photos
 - Defer client-side compression until it is needed
 
@@ -212,6 +222,7 @@ Prepare Mocca for regular use.
 - Add Sentry to the mobile app and server
 - Review structured Pino logging
 - Automate PostgreSQL backups with scheduled `pg_dump`
+- Automate SeaweedFS backups and test full restore procedures
 - Add push notifications for new notes
 - Configure rate limiting, security headers, and production CORS
 - Validate all API input on the server
@@ -236,10 +247,9 @@ Add features that make the app more personal and useful day to day.
 
 Introduce more complex systems only when they solve a demonstrated problem or support a specific learning goal.
 
-- Replace polling with Supabase Realtime or server-sent events
+- Replace polling with server-sent events when real-time updates are needed
 - Add persisted queries, local caching, and offline changes
 - Define conflict resolution for concurrent offline edits
-- Evaluate Better Auth as an alternative to Clerk
 - Evaluate a small set of useful PostHog events
 - Add shared visit dates, countdowns, and optional location features
 - Add small, self-contained games or prompts
@@ -259,7 +269,7 @@ Keep larger optional features out of the critical path until the core app is sta
 
 ### Keep the system proportional
 
-Use managed services when building the infrastructure would not provide useful product or engineering value. Do not introduce Redis, Kafka, Kubernetes, microservices, or similar systems without a concrete need.
+Self-hosting is a deliberate engineering goal for this project, but the system should remain proportional. Do not introduce Redis, Kafka, Kubernetes, microservices, or similar systems without a concrete need.
 
 ### Enforce authorization on the server
 
@@ -267,7 +277,7 @@ The mobile client is not a security boundary. Every request for shared data must
 
 ### Start with the simpler design
 
-Use online CRUD before offline synchronization, polling before real-time updates, and managed authentication before custom authentication infrastructure. Add complexity when it addresses a measured problem.
+Use online CRUD before offline synchronization, polling before real-time updates, and an established authentication library with external identity providers before custom authentication flows. Add complexity when it addresses a measured problem.
 
 ### Test important behavior
 
