@@ -6,7 +6,7 @@ The project is also a practical exercise in building and operating a production-
 
 ## Current Status
 
-Mocca is in the `v0.1` foundation phase. The monorepo, root tooling, CI workflow, Expo app, and Fastify/tRPC server are in place. The Drizzle database package now defines the Better Auth schema, and its migration has been applied to local PostgreSQL. Server-side Better Auth is configured for Google and Apple, with the server using a dedicated least-privilege database role. The shared package remains a placeholder. A repeatable Compose stack, SeaweedFS, Expo sign-in, production deployment, and backup/restore processes are still outstanding.
+Mocca is in the `v0.1` foundation phase. The monorepo, root tooling, CI workflow, Expo app, and Fastify/tRPC server are in place. The Drizzle database package defines the Better Auth schema, and local PostgreSQL runs under Docker Compose alongside SeaweedFS. Migrations configure default CRUD privileges for new public tables created by the migration role, while the server uses a dedicated least-privilege role. The shared package, Expo sign-in, full application/Caddy deployment, and backup/restore processes remain outstanding.
 
 ## Architecture
 
@@ -105,6 +105,28 @@ Run all repository checks:
 pnpm check
 ```
 
+Start the local PostgreSQL and SeaweedFS services with Docker Compose:
+
+```bash
+docker compose up -d
+docker compose ps
+```
+
+The PostgreSQL service reuses the external `mocca-postgres-data` volume and binds only to `127.0.0.1:5432`; SeaweedFS stores data in `mocca-seaweedfs-data` and exposes its authenticated S3 endpoint at `http://127.0.0.1:8333`. Copy `.env.example` to `.env`; set `POSTGRES_PASSWORD` to the password for the `postgres` role in `packages/db/.env`, and choose local SeaweedFS credentials. Keep `.env` private, and do not run `docker compose down --volumes` unless you intend to delete the SeaweedFS data volume. The PostgreSQL volume is external and is not removed by Compose.
+
+### Database schema and migrations
+
+Add or change Drizzle table definitions in `packages/db/src/schema.ts`, including relation definitions where needed. Generate a migration and inspect the SQL before applying it:
+
+```bash
+pnpm --filter @mocca/db db:generate
+pnpm --filter @mocca/db db:migrate
+```
+
+`db:migrate` first configures PostgreSQL default privileges, then applies pending migrations using the admin connection in `packages/db/.env`. New tables created by that migration role in the `public` schema automatically receive `SELECT`, `INSERT`, `UPDATE`, and `DELETE` for the server's `mocca_app` role. New sequences also receive `USAGE` and `SELECT`, which permits inserts into sequence-backed tables. The runtime role cannot run migrations or create tables.
+
+Default privileges apply only to future objects created by the role in `DATABASE_URL`; they do not retroactively grant access or apply to objects created by another role or in another schema. The `mocca_app` role must exist before running migrations. The setup can be reapplied independently with `pnpm --filter @mocca/db db:grant-default-privileges`.
+
 Available root commands:
 
 | Command | Purpose |
@@ -178,7 +200,8 @@ Establish the project structure and deployment foundation.
 - [ ] Implement the shared package
 - [x] Apply the auth migration to local PostgreSQL and configure the server's least-privilege runtime role
 - [ ] Provision the self-hosted server and configure its firewall and access
-- [ ] Define the Docker Compose services, networks, volumes, and environment variables
+- [x] Define the local Docker Compose services, networks, volumes, and environment variables for PostgreSQL and SeaweedFS
+- [ ] Extend the Compose stack with Fastify and Caddy for deployment
 - [ ] Deploy Fastify, PostgreSQL, and SeaweedFS behind Caddy
 - [x] Configure server-side Better Auth providers for Google and Apple
 - [ ] Connect the Expo app to the server and complete an end-to-end sign-in flow
