@@ -6,7 +6,7 @@ The project is also a practical exercise in building and operating a production-
 
 ## Current Status
 
-Mocca is in the `v0.1` foundation phase. The monorepo, root tooling, CI workflow, Expo app, and Fastify/tRPC server are in place. The Drizzle database package defines the Better Auth schema, and local PostgreSQL runs under Docker Compose alongside SeaweedFS. Migrations configure default CRUD privileges for new public tables created by the migration role, while the server uses a dedicated least-privilege role. Expo sign-in with Google and Apple, protected routes, and sign-out work against the development API. The shared package workspace and root export are set up; shared domain contracts will be added when features need them. Application features, production/Caddy deployment, and backup/restore processes remain outstanding.
+Mocca is in the `v0.1` foundation phase. The monorepo, root tooling, CI workflow, Expo app, and Fastify/tRPC server are in place. The Drizzle database package defines the Better Auth schema, and local PostgreSQL runs under Docker Compose alongside SeaweedFS. Migrations configure default CRUD privileges for new public tables created by the migration role, while the server uses a dedicated least-privilege role. Expo sign-in with Google and Apple, protected routes, and sign-out work against the development API. The shared package workspace and root export are set up; shared domain contracts will be added when features need them. The production Compose stack is defined but not deployed; application features and backup/restore processes remain outstanding.
 
 ## Architecture
 
@@ -23,7 +23,7 @@ React Native/Expo
   PostgreSQL
 ```
 
-Better Auth uses PostgreSQL for Google and Apple social sign-in, and the Expo client stores its session cookie in SecureStore. Development API traffic uses a named Cloudflare Tunnel; the Caddy deployment below is planned for production. Authorization remains the responsibility of the Fastify server. A user may access content only when they belong to the shared space that owns it. PostgreSQL and SeaweedFS will use persistent storage and require tested backups and restores.
+Better Auth uses PostgreSQL for Google and Apple social sign-in, and the Expo client stores its session cookie in SecureStore. Development API traffic uses a named Cloudflare Tunnel; the production Compose stack configures Caddy but has not yet been deployed. Authorization remains the responsibility of the Fastify server. A user may access content only when they belong to the shared space that owns it. PostgreSQL and SeaweedFS use persistent storage and require tested backups and restores.
 
 ### Infrastructure decisions
 
@@ -113,6 +113,24 @@ docker compose ps
 ```
 
 The PostgreSQL service reuses the external `mocca-postgres-data` volume and binds only to `127.0.0.1:5432`; SeaweedFS stores data in `mocca-seaweedfs-data` and exposes its authenticated S3 endpoint at `http://127.0.0.1:8333`. Copy `.env.example` to `.env`; set `POSTGRES_PASSWORD` to the password for the `postgres` role in `packages/db/.env`, and choose local SeaweedFS credentials. Keep `.env` private, and do not run `docker compose down --volumes` unless you intend to delete the SeaweedFS data volume. The PostgreSQL volume is external and is not removed by Compose.
+
+### Production Compose stack
+
+`compose.production.yaml` runs PostgreSQL, SeaweedFS, the Fastify API, and Caddy. Only Caddy publishes ports 80 and 443; the API, database, and object storage are not published to the host. The stack uses separate named volumes and a production-only environment file.
+
+Before starting it, point the production API hostname at the server's public IP, allow inbound TCP ports 80 and 443 in the DigitalOcean Cloud Firewall, and create `.env.production` from `.env.production.example`. Set unique production database passwords, Better Auth secret, Google and Apple production credentials, Apple private key, and a valid ACME email. Generate URL-safe random secrets with `openssl rand -hex 32`; keep `.env.production` private and never reuse development credentials.
+
+Run these commands from the repository root on the server. Start the data services, create the least-privilege runtime role, and apply migrations before starting the API:
+
+```bash
+docker compose --env-file .env.production -f compose.production.yaml up -d postgres seaweedfs
+docker compose --env-file .env.production -f compose.production.yaml --profile setup run --rm db-role
+docker compose --env-file .env.production -f compose.production.yaml --profile migrations run --rm migrate
+docker compose --env-file .env.production -f compose.production.yaml up -d api caddy
+docker compose --env-file .env.production -f compose.production.yaml ps
+```
+
+The migration service uses the PostgreSQL admin credentials; the API connects as `mocca_app`. Caddy obtains and renews HTTPS certificates automatically after DNS resolves to the server and ports 80 and 443 are reachable. Check the API with `curl -fsS https://mocca-api.sebastianamartinez.com/health`. Do not use `docker compose down --volumes` on the production stack; it deletes its database, object-storage, and Caddy state volumes.
 
 ### Database schema and migrations
 
@@ -213,9 +231,9 @@ Establish the project structure and deployment foundation.
 - [x] Create the Drizzle database package and define the Better Auth schema
 - [x] Set up the shared package workspace and root export
 - [x] Apply the auth migration to local PostgreSQL and configure the server's least-privilege runtime role
-- [ ] Provision the self-hosted server and configure its firewall and access
+- [x] Provision the self-hosted server and configure its firewall and access
 - [x] Define the local Docker Compose services, networks, volumes, and environment variables for PostgreSQL and SeaweedFS
-- [ ] Extend the Compose stack with Fastify and Caddy for deployment
+- [x] Extend the Compose stack with Fastify and Caddy for deployment
 - [ ] Deploy Fastify, PostgreSQL, and SeaweedFS behind Caddy
 - [x] Configure server-side Better Auth providers for Google and Apple
 - [x] Connect the Expo app to the server and complete an end-to-end sign-in flow
