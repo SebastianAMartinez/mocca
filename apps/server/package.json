@@ -3,12 +3,15 @@
 	"version": "0.0.0",
 	"private": true,
 	"type": "module",
+	"files": [
+		"dist"
+	],
 	"scripts": {
-		"build": "tsc -p tsconfig.json",
-		"dev": "tsx watch --env-file=.env src/server.ts",
+		"build": "pnpm --filter @mocca/db build && tsc -p tsconfig.json",
+		"dev": "node --conditions=development --import tsx --watch --env-file=.env src/server.ts",
 		"start": "node dist/server.js",
-		"test": "node --import tsx --test tests/*.test.ts",
-		"test:watch": "node --import tsx --test --watch tests/*.test.ts",
+		"test": "node --conditions=development --import tsx --test tests/*.test.ts",
+		"test:watch": "node --conditions=development --import tsx --test --watch tests/*.test.ts",
 		"typecheck": "tsc -p tsconfig.json --noEmit"
 	},
 	"dependencies": {
