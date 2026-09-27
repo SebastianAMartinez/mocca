@@ -58,11 +58,11 @@ fi
 
 docker image inspect busybox:1.37.0 >/dev/null 2>&1 || docker pull busybox:1.37.0 >/dev/null
 
-restic backup \
-	--stdin-from-command \
-	--stdin-filename mocca-postgres.dump \
-	--tag postgres \
-	-- "${compose[@]}" exec -T postgres sh -ec 'exec pg_dump --format=custom --no-owner --no-acl -U "$POSTGRES_USER" "$POSTGRES_DB"'
+"${compose[@]}" exec -T postgres sh -ec 'exec pg_dump --format=custom --no-owner --no-acl -U "$POSTGRES_USER" "$POSTGRES_DB"' |
+	restic backup \
+		--stdin \
+		--stdin-filename mocca-postgres.dump \
+		--tag postgres
 
 seaweed_was_stopped=0
 restart_seaweedfs() {
@@ -80,11 +80,11 @@ trap restart_seaweedfs EXIT
 "${compose[@]}" stop seaweedfs
 seaweed_was_stopped=1
 
-restic backup \
-	--stdin-from-command \
-	--stdin-filename mocca-seaweedfs.tar \
-	--tag seaweedfs \
-	-- docker run --rm --mount "type=volume,src=$seaweed_volume,dst=/source,readonly" busybox:1.37.0 tar -cf - -C /source .
+docker run --rm --mount "type=volume,src=$seaweed_volume,dst=/source,readonly" busybox:1.37.0 tar -cf - -C /source . |
+	restic backup \
+		--stdin \
+		--stdin-filename mocca-seaweedfs.tar \
+		--tag seaweedfs
 
 "${compose[@]}" start seaweedfs
 seaweed_was_stopped=0
