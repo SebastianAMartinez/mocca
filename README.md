@@ -276,7 +276,7 @@ Establish the project structure and deployment foundation.
 - [x] Deploy Fastify, PostgreSQL, and SeaweedFS behind Caddy
 - [x] Configure server-side Better Auth providers for Google and Apple
 - [x] Connect the Expo app to the server and complete an end-to-end sign-in flow
-- [ ] Define and test PostgreSQL and SeaweedFS backup and restore processes
+- [x] Define and test PostgreSQL and SeaweedFS backup and restore processes
 - [x] Connect the GitHub repository and verify CI
 
 ### v0.2: MVP
