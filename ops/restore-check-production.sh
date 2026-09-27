@@ -57,7 +57,8 @@ docker run --detach \
 
 postgres_ready=0
 for attempt in {1..60}; do
-	if docker exec "$postgres_container" pg_isready -U postgres -d mocca_restore_check >/dev/null 2>&1; then
+	if docker exec "$postgres_container" sh -ec 'test "$(cat /proc/1/comm)" = postgres' >/dev/null 2>&1 &&
+		docker exec "$postgres_container" pg_isready -U postgres -d mocca_restore_check >/dev/null 2>&1; then
 		postgres_ready=1
 		break
 	fi
