@@ -6,7 +6,7 @@ The project is also a practical exercise in building and operating a production-
 
 ## Current Status
 
-Mocca is in the `v0.1` foundation phase. The monorepo, root tooling, CI workflow, Expo app, and Fastify/tRPC server are in place. The Drizzle database package defines the Better Auth schema, and local PostgreSQL runs under Docker Compose alongside SeaweedFS. Migrations configure default CRUD privileges for new public tables created by the migration role, while the server uses a dedicated least-privilege role. Expo sign-in with Google and Apple, protected routes, and sign-out work against the development API. The shared package workspace and root export are set up; shared domain contracts will be added when features need them. The production Compose stack is defined but not deployed; application features and backup/restore processes remain outstanding.
+Mocca is in the `v0.1` foundation phase. The monorepo, root tooling, CI workflow, Expo app, and Fastify/tRPC server are in place. The Drizzle database package defines the Better Auth schema, and local PostgreSQL runs under Docker Compose alongside SeaweedFS. Migrations configure default CRUD privileges for new public tables created by the migration role, while the server uses a dedicated least-privilege role. Expo sign-in with Google and Apple, protected routes, and sign-out work against the development API. The shared package workspace and root export are set up; shared domain contracts will be added when features need them. The production stack now runs behind Caddy at `mocca-api.sebastianamartinez.com`, with its health endpoint verified through Cloudflare. Application features and backup/restore processes remain outstanding.
 
 ## Architecture
 
@@ -23,7 +23,7 @@ React Native/Expo
   PostgreSQL
 ```
 
-Better Auth uses PostgreSQL for Google and Apple social sign-in, and the Expo client stores its session cookie in SecureStore. Development API traffic uses a named Cloudflare Tunnel; the production Compose stack configures Caddy but has not yet been deployed. Authorization remains the responsibility of the Fastify server. A user may access content only when they belong to the shared space that owns it. PostgreSQL and SeaweedFS use persistent storage and require tested backups and restores.
+Better Auth uses PostgreSQL for Google and Apple social sign-in, and the Expo client stores its session cookie in SecureStore. Development API traffic uses a named Cloudflare Tunnel; production traffic reaches Fastify through Caddy and Cloudflare. Authorization remains the responsibility of the Fastify server. A user may access content only when they belong to the shared space that owns it. PostgreSQL and SeaweedFS use persistent storage and require tested backups and restores.
 
 ### Infrastructure decisions
 
@@ -234,7 +234,7 @@ Establish the project structure and deployment foundation.
 - [x] Provision the self-hosted server and configure its firewall and access
 - [x] Define the local Docker Compose services, networks, volumes, and environment variables for PostgreSQL and SeaweedFS
 - [x] Extend the Compose stack with Fastify and Caddy for deployment
-- [ ] Deploy Fastify, PostgreSQL, and SeaweedFS behind Caddy
+- [x] Deploy Fastify, PostgreSQL, and SeaweedFS behind Caddy
 - [x] Configure server-side Better Auth providers for Google and Apple
 - [x] Connect the Expo app to the server and complete an end-to-end sign-in flow
 - [ ] Define and test PostgreSQL and SeaweedFS backup and restore processes
