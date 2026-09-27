@@ -138,11 +138,12 @@ The backup scripts use Restic with B2's S3-compatible API. Restic encrypts and d
 
 In Backblaze, create a private Standard bucket and a dedicated S3-compatible application key restricted to that bucket. Grant `listAllBucketNames`, `listFiles`, `readFiles`, `writeFiles`, and `deleteFiles`; Restic needs delete access for pruning. Add a bucket lifecycle rule to keep only the latest version of each object, as recommended for Restic's S3 backend. This key can delete backup objects, so keep it only on the Droplet and use a dedicated bucket. Restic encryption does not prevent a compromised Droplet from deleting backups.
 
-Install Restic and `jq`, then create a root-only backup environment file from the template:
+Install Restic **0.17.0 or newer** and `jq`; the backup scripts use `--stdin-from-command`, added in Restic 0.17.0, to ensure failed dump/archive commands do not produce successful snapshots. Distribution packages may be older, so check `restic version` and use the [official stable Linux binary installation instructions](https://restic.readthedocs.io/en/stable/020_installation.html) if needed. Then create a root-only backup environment file from the template:
 
 ```bash
 sudo apt update
-sudo apt install restic jq
+sudo apt install jq
+restic version
 sudo install -o root -g root -m 600 ops/backup-b2.env.example /etc/mocca-backup.env
 sudo nano /etc/mocca-backup.env
 ```
