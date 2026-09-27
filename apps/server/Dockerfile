@@ -15,6 +15,8 @@ RUN pnpm --filter @mocca/server --prod deploy /production
 
 FROM node:24-bookworm-slim AS runtime
 
+LABEL org.opencontainers.image.source="https://github.com/SebastianAMartinez/mocca"
+
 ENV NODE_ENV=production
 ENV HOST=0.0.0.0
 ENV PORT=3000
