@@ -6,7 +6,7 @@ The project is also a practical exercise in building and operating a production-
 
 ## Current Status
 
-Mocca is in the `v0.1` foundation phase. The monorepo, root tooling, CI workflow, Expo app, and Fastify/tRPC server are in place. The Drizzle database package defines the Better Auth schema, and local PostgreSQL runs under Docker Compose alongside SeaweedFS. Migrations configure default CRUD privileges for new public tables created by the migration role, while the server uses a dedicated least-privilege role. Expo sign-in with Google and Apple, protected routes, and sign-out work against the development API. The shared package, application features, production/Caddy deployment, and backup/restore processes remain outstanding.
+Mocca is in the `v0.1` foundation phase. The monorepo, root tooling, CI workflow, Expo app, and Fastify/tRPC server are in place. The Drizzle database package defines the Better Auth schema, and local PostgreSQL runs under Docker Compose alongside SeaweedFS. Migrations configure default CRUD privileges for new public tables created by the migration role, while the server uses a dedicated least-privilege role. Expo sign-in with Google and Apple, protected routes, and sign-out work against the development API. The shared package workspace and root export are set up; shared domain contracts will be added when features need them. Application features, production/Caddy deployment, and backup/restore processes remain outstanding.
 
 ## Architecture
 
@@ -47,7 +47,7 @@ packages/
   shared/       Shared types, schemas, constants, and domain utilities
 ```
 
-Each workspace should contain only code that belongs to its stated responsibility. Shared packages should not become a general-purpose location for unrelated code.
+Each workspace should contain only code that belongs to its stated responsibility. The shared package is the home for contracts genuinely used by both mobile and server; it should not become a general-purpose location for unrelated code.
 
 ## Technology
 
@@ -211,7 +211,7 @@ Establish the project structure and deployment foundation.
 - [x] Initialize the Expo mobile application
 - [x] Initialize the Fastify server and tRPC API
 - [x] Create the Drizzle database package and define the Better Auth schema
-- [ ] Implement the shared package
+- [x] Set up the shared package workspace and root export
 - [x] Apply the auth migration to local PostgreSQL and configure the server's least-privilege runtime role
 - [ ] Provision the self-hosted server and configure its firewall and access
 - [x] Define the local Docker Compose services, networks, volumes, and environment variables for PostgreSQL and SeaweedFS
