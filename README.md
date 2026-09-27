@@ -6,7 +6,7 @@ The project is also a practical exercise in building and operating a production-
 
 ## Current Status
 
-Mocca is in the `v0.1` foundation phase. The monorepo, root tooling, CI workflow, Expo app, and Fastify/tRPC server are in place. The Drizzle database package defines the Better Auth schema, and local PostgreSQL runs under Docker Compose alongside SeaweedFS. Migrations configure default CRUD privileges for new public tables created by the migration role, while the server uses a dedicated least-privilege role. The shared package, Expo sign-in, full application/Caddy deployment, and backup/restore processes remain outstanding.
+Mocca is in the `v0.1` foundation phase. The monorepo, root tooling, CI workflow, Expo app, and Fastify/tRPC server are in place. The Drizzle database package defines the Better Auth schema, and local PostgreSQL runs under Docker Compose alongside SeaweedFS. Migrations configure default CRUD privileges for new public tables created by the migration role, while the server uses a dedicated least-privilege role. Expo sign-in with Google and Apple, protected routes, and sign-out work against the development API. The shared package, application features, production/Caddy deployment, and backup/restore processes remain outstanding.
 
 ## Architecture
 
@@ -23,7 +23,7 @@ React Native/Expo
   PostgreSQL
 ```
 
-Better Auth is configured on the server for Google and Apple social sign-in; the Expo client flow is not yet integrated. Authorization remains the responsibility of the Fastify server. A user may access content only when they belong to the shared space that owns it. PostgreSQL and SeaweedFS will use persistent storage and require tested backups and restores.
+Better Auth uses PostgreSQL for Google and Apple social sign-in, and the Expo client stores its session cookie in SecureStore. Development API traffic uses a named Cloudflare Tunnel; the Caddy deployment below is planned for production. Authorization remains the responsibility of the Fastify server. A user may access content only when they belong to the shared space that owns it. PostgreSQL and SeaweedFS will use persistent storage and require tested backups and restores.
 
 ### Infrastructure decisions
 
@@ -148,11 +148,25 @@ Start the server in development mode:
 pnpm --filter @mocca/server dev
 ```
 
+The development server loads `apps/server/.env`; set `BETTER_AUTH_URL` to
+`https://mocca-api-dev.sebastianamartinez.com`. For deployment, run
+`pnpm --filter @mocca/server build` and `pnpm --filter @mocca/server start`.
+The start command does not load the development `.env` file: supply
+`BETTER_AUTH_URL=https://mocca-api.sebastianamartinez.com`, `NODE_ENV=production`,
+`DATABASE_URL`, `BETTER_AUTH_SECRET`, and the Google and Apple credentials through
+the deployment environment. Use a separate production database and secrets;
+configure both providers' production callback URLs for the production hostname.
+
 Start the Expo development server:
 
 ```bash
 pnpm --filter @mocca/mobile start
 ```
+
+The mobile app uses `EXPO_PUBLIC_API_URL` from its ignored `.env.local` during
+local development. EAS development and preview builds target the development API;
+the production profile targets `https://mocca-api.sebastianamartinez.com` once
+that server is deployed. API URLs are public configuration, not secrets.
 
 ## Branch Workflow
 
@@ -204,7 +218,7 @@ Establish the project structure and deployment foundation.
 - [ ] Extend the Compose stack with Fastify and Caddy for deployment
 - [ ] Deploy Fastify, PostgreSQL, and SeaweedFS behind Caddy
 - [x] Configure server-side Better Auth providers for Google and Apple
-- [ ] Connect the Expo app to the server and complete an end-to-end sign-in flow
+- [x] Connect the Expo app to the server and complete an end-to-end sign-in flow
 - [ ] Define and test PostgreSQL and SeaweedFS backup and restore processes
 - [x] Connect the GitHub repository and verify CI
 
@@ -214,28 +228,28 @@ Build the smallest useful version of Mocca and install it on both phones.
 
 #### Authentication and shared space
 
-- Authenticate both users
-- Create a shared space representing the relationship
-- Enforce membership-based access on the server
-- Test that users cannot access another shared space
+- [ ] Authenticate both users
+- [ ] Create a shared space representing the relationship
+- [ ] Enforce membership-based access on the server
+- [ ] Test that users cannot access another shared space
 
 #### Notes and reactions
 
-- Create, read, update, and delete shared notes
-- Read notes from both phones
-- Add basic note reactions
+- [ ] Create, read, update, and delete shared notes
+- [ ] Read notes from both phones
+- [ ] Add basic note reactions
 
 #### Photos
 
-- Upload photos to SeaweedFS using signed object-storage URLs
-- View uploaded photos
-- Defer client-side compression until it is needed
+- [ ] Upload photos to SeaweedFS using signed object-storage URLs
+- [ ] View uploaded photos
+- [ ] Defer client-side compression until it is needed
 
 #### Delivery
 
-- Create the first TestFlight build
-- Install the app on both phones
-- Verify the complete flow between both devices
+- [ ] Create the first TestFlight build
+- [ ] Install the app on both phones
+- [ ] Verify the complete flow between both devices
 
 Tests will be added with each feature. Initial coverage should focus on authentication, authorization, shared-space isolation, and note behavior.
 
@@ -243,52 +257,52 @@ Tests will be added with each feature. Initial coverage should focus on authenti
 
 Prepare Mocca for regular use.
 
-- Configure EAS Update for JavaScript and asset updates
-- Add Sentry to the mobile app and server
-- Review structured Pino logging
-- Automate PostgreSQL backups with scheduled `pg_dump`
-- Automate SeaweedFS backups and test full restore procedures
-- Add push notifications for new notes
-- Configure rate limiting, security headers, and production CORS
-- Validate all API input on the server
-- Expand backend and mobile test coverage for important flows
-- Add the app icon, splash screen, theming, and consistent UI states
+- [ ] Configure EAS Update for JavaScript and asset updates
+- [ ] Add Sentry to the mobile app and server
+- [ ] Review structured Pino logging
+- [ ] Automate PostgreSQL backups with scheduled `pg_dump`
+- [ ] Automate SeaweedFS backups and test full restore procedures
+- [ ] Add push notifications for new notes
+- [ ] Configure rate limiting, security headers, and production CORS
+- [ ] Validate all API input on the server
+- [ ] Expand backend and mobile test coverage for important flows
+- [ ] Add the app icon, splash screen, theming, and consistent UI states
 
 ### v1.1: Quality of Life
 
 Add features that make the app more personal and useful day to day.
 
-- "Thinking of you" notifications
-- Daily questions and quick status updates
-- "On my way" status
-- Photo gallery and shared memories timeline
-- Photo compression with `expo-image-manipulator`
-- Reactions on photos and memories
-- "Open when..." messages
-- Pull-to-refresh and polling for shared updates
-- First complete user-facing changelog
+- [ ] "Thinking of you" notifications
+- [ ] Daily questions and quick status updates
+- [ ] "On my way" status
+- [ ] Photo gallery and shared memories timeline
+- [ ] Photo compression with `expo-image-manipulator`
+- [ ] Reactions on photos and memories
+- [ ] "Open when..." messages
+- [ ] Pull-to-refresh and polling for shared updates
+- [ ] First complete user-facing changelog
 
 ### v2.0: Advanced Engineering
 
 Introduce more complex systems only when they solve a demonstrated problem or support a specific learning goal.
 
-- Replace polling with server-sent events when real-time updates are needed
-- Add persisted queries, local caching, and offline changes
-- Define conflict resolution for concurrent offline edits
-- Evaluate a small set of useful PostHog events
-- Add shared visit dates, countdowns, and optional location features
-- Add small, self-contained games or prompts
+- [ ] Replace polling with server-sent events when real-time updates are needed
+- [ ] Add persisted queries, local caching, and offline changes
+- [ ] Define conflict resolution for concurrent offline edits
+- [ ] Evaluate a small set of useful PostHog events
+- [ ] Add shared visit dates, countdowns, and optional location features
+- [ ] Add small, self-contained games or prompts
 
 ### v3.0 and Later
 
 Keep larger optional features out of the critical path until the core app is stable.
 
-- iOS widgets
-- Live Activities
-- Voice notes
-- Shared bucket list and to-do list
-- Anniversary and date reminders
-- Additional features based on real usage
+- [ ] iOS widgets
+- [ ] Live Activities
+- [ ] Voice notes
+- [ ] Shared bucket list and to-do list
+- [ ] Anniversary and date reminders
+- [ ] Additional features based on real usage
 
 ## Engineering Principles
 
@@ -316,13 +330,13 @@ The priority is a stable `v1.0` running on both phones. Work planned for `v2.0` 
 
 Before completing a release:
 
-- Verify the feature on both phones
-- Confirm server-side authorization coverage
-- Run relevant automated tests
-- Run type checking, linting, and formatting checks
-- Verify production configuration
-- Confirm error reporting where applicable
-- Verify database backups
-- Test the mobile build through TestFlight
-- Add required changesets and changelogs
-- Create the Git release tag
+- [ ] Verify the feature on both phones
+- [ ] Confirm server-side authorization coverage
+- [ ] Run relevant automated tests
+- [ ] Run type checking, linting, and formatting checks
+- [ ] Verify production configuration
+- [ ] Confirm error reporting where applicable
+- [ ] Verify database backups
+- [ ] Test the mobile build through TestFlight
+- [ ] Add required changesets and changelogs
+- [ ] Create the Git release tag

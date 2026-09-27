@@ -216,7 +216,7 @@ The project follows a staged roadmap.
 
 Do not implement future roadmap features unless explicitly requested.
 
-The current priority is establishing the monorepo foundation.
+The monorepo foundation is in place; continue with the remaining roadmap stages incrementally.
 
 The initial infrastructure sequence is:
 
@@ -333,8 +333,6 @@ When multiple reasonable approaches exist, briefly explain the tradeoff and use 
 
 ## Current Stage
 
-The repository is currently being initialized.
+The monorepo foundation, Expo mobile app, Fastify server, and local database infrastructure are in place. Better Auth supports Google and Apple sign-in from the Expo app, session persistence, protected routes, and sign-out against the development API.
 
-The immediate goal is to establish a clean, working monorepo foundation before implementing Mocca functionality.
-
-Do not implement authentication, notes, photos, shared spaces, widgets, or other application features until the repository foundation is complete.
+The development API uses a named Cloudflare Tunnel; production deployment and its separate database are not yet configured. Continue the staged roadmap with shared code, authorization, application features, and appropriate tests as those features are introduced. Do not implement notes, photos, shared spaces, or widgets unless explicitly requested.

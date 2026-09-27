@@ -1,18 +1,28 @@
-import { DarkTheme, DefaultTheme, ThemeProvider } from "expo-router";
-import * as SplashScreen from "expo-splash-screen";
-import { useColorScheme } from "react-native";
+import { SplashScreen, Stack } from "expo-router";
+import { useEffect } from "react";
 
-import { AnimatedSplashOverlay } from "@/components/animated-icon";
-import AppTabs from "@/components/app-tabs";
+import { authClient } from "@/lib/auth-client";
 
 SplashScreen.preventAutoHideAsync();
 
-export default function TabLayout() {
-	const colorScheme = useColorScheme();
+export default function RootLayout() {
+	const { data: session, isPending } = authClient.useSession();
+
+	useEffect(() => {
+		if (!isPending) {
+			SplashScreen.hide();
+		}
+	}, [isPending]);
+
 	return (
-		<ThemeProvider value={colorScheme === "dark" ? DarkTheme : DefaultTheme}>
-			<AnimatedSplashOverlay />
-			<AppTabs />
-		</ThemeProvider>
+		<Stack>
+			<Stack.Protected guard={!isPending && !session}>
+				<Stack.Screen name="(auth)" />
+			</Stack.Protected>
+
+			<Stack.Protected guard={!isPending && !!session}>
+				<Stack.Screen name="(app)" />
+			</Stack.Protected>
+		</Stack>
 	);
 }

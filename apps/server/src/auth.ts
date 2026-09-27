@@ -1,4 +1,5 @@
 import { drizzleAdapter } from "@better-auth/drizzle-adapter/relations-v2";
+import { expo } from "@better-auth/expo";
 import { db, schema } from "@mocca/db";
 import { betterAuth } from "better-auth/minimal";
 import { importPKCS8, SignJWT } from "jose";
@@ -41,8 +42,13 @@ const applePrivateKey = requireEnvironmentVariable("APPLE_PRIVATE_KEY");
 const appleAppBundleIdentifier = requireEnvironmentVariable(
 	"APPLE_APP_BUNDLE_IDENTIFIER",
 );
+const expoDevelopmentOrigins =
+	process.env.NODE_ENV === "development"
+		? ["exp://", "exp://**", "exp://192.168.*.*:*/**"]
+		: [];
 
 export const auth = betterAuth({
+	plugins: [expo()],
 	database: drizzleAdapter(db, {
 		provider: "pg",
 		schema,
@@ -64,5 +70,9 @@ export const auth = betterAuth({
 			appBundleIdentifier: appleAppBundleIdentifier,
 		}),
 	},
-	trustedOrigins: ["https://appleid.apple.com"],
+	trustedOrigins: [
+		"https://appleid.apple.com",
+		"mocca://",
+		...expoDevelopmentOrigins,
+	],
 });
