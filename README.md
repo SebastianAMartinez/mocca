@@ -132,6 +132,44 @@ docker compose --env-file .env.production -f compose.production.yaml ps
 
 The migration service uses the PostgreSQL admin credentials; the API connects as `mocca_app`. Caddy obtains and renews HTTPS certificates automatically after DNS resolves to the server and ports 80 and 443 are reachable. Check the API with `curl -fsS https://mocca-api.sebastianamartinez.com/health`. Do not use `docker compose down --volumes` on the production stack; it deletes its database, object-storage, and Caddy state volumes.
 
+### Production backups with Backblaze B2
+
+The backup scripts use Restic with B2's S3-compatible API. Restic encrypts and deduplicates the PostgreSQL custom-format dump and SeaweedFS data archive before upload. PostgreSQL is backed up online. SeaweedFS is stopped while its named volume is archived for consistency, then restarted; photo/object-storage requests will be unavailable during that archive. Revisit this procedure before enabling photo uploads.
+
+In Backblaze, create a private Standard bucket and a dedicated S3-compatible application key restricted to that bucket. Grant `listAllBucketNames`, `listFiles`, `readFiles`, `writeFiles`, and `deleteFiles`; Restic needs delete access for pruning. Add a bucket lifecycle rule to keep only the latest version of each object, as recommended for Restic's S3 backend. This key can delete backup objects, so keep it only on the Droplet and use a dedicated bucket. Restic encryption does not prevent a compromised Droplet from deleting backups.
+
+Install Restic and `jq`, then create a root-only backup environment file from the template:
+
+```bash
+sudo apt update
+sudo apt install restic jq
+sudo install -o root -g root -m 600 ops/backup-b2.env.example /etc/mocca-backup.env
+sudo nano /etc/mocca-backup.env
+```
+
+Set the bucket's region and name in `RESTIC_REPOSITORY` and `AWS_DEFAULT_REGION`, and enter the B2 application key ID and application key in the matching AWS variables. Generate a unique Restic repository password with `openssl rand -hex 32`; keep it in a password manager because losing it makes the encrypted backup unrecoverable. Do not reuse credentials from `.env.production`.
+
+Initialize the encrypted repository, run the first backup, and perform a non-destructive restore check before enabling the schedule:
+
+```bash
+sudo bash -c 'set -a; . /etc/mocca-backup.env; set +a; restic init'
+sudo bash ops/backup-production.sh
+sudo bash ops/restore-check-production.sh
+```
+
+The restore check restores PostgreSQL into an isolated container, restores the SeaweedFS archive into a temporary volume, and starts SeaweedFS with networking disabled. It removes the temporary containers and volumes when finished; it does not modify production data. B2 access and valid backup snapshots are required for the check. Backups do not include `.env.production` or `/etc/mocca-backup.env`; keep those files' secrets, the Restic repository password, and provider credentials in a secure off-server password manager. A disaster recovery also needs the runtime database role recreated with the saved `.env.production` values before restoring the database.
+
+Install and enable the daily backup and weekly retention/integrity timers:
+
+```bash
+sudo install -o root -g root -m 644 ops/mocca-backup.service ops/mocca-backup.timer ops/mocca-backup-prune.service ops/mocca-backup-prune.timer /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now mocca-backup.timer mocca-backup-prune.timer
+systemctl list-timers 'mocca-backup*'
+```
+
+Daily backups keep seven daily, four weekly, and twelve monthly snapshots. The weekly job prunes unused Restic data and checks a 10% subset of repository data. Inspect job output with `sudo journalctl -u mocca-backup.service` and `sudo journalctl -u mocca-backup-prune.service`. Keep the backup/restore roadmap item open until a B2 backup and isolated restore check both succeed.
+
 ### Database schema and migrations
 
 Add or change Drizzle table definitions in `packages/db/src/schema.ts`, including relation definitions where needed. Generate a migration and inspect the SQL before applying it:

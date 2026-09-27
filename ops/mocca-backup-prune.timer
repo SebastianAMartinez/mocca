@@ -1,0 +1,11 @@
+[Unit]
+Description=Weekly Mocca backup retention and integrity check
+
+[Timer]
+OnCalendar=Sun *-*-* 03:30:00
+RandomizedDelaySec=20m
+Persistent=true
+Unit=mocca-backup-prune.service
+
+[Install]
+WantedBy=timers.target

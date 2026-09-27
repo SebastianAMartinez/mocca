@@ -1,0 +1,16 @@
+[Unit]
+Description=Back up Mocca PostgreSQL and SeaweedFS to Backblaze B2
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=root
+EnvironmentFile=/etc/mocca-backup.env
+WorkingDirectory=/home/sebastian/mocca
+ExecStart=/usr/bin/bash /home/sebastian/mocca/ops/backup-production.sh
+TimeoutStartSec=0
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7
