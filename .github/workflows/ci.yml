@@ -30,3 +30,9 @@ jobs:
 
       - name: Check formatting, linting, and types
         run: pnpm check
+
+      - name: Build server
+        run: pnpm --filter @mocca/server build
+
+      - name: Build production API image
+        run: docker build --file apps/server/Dockerfile --target runtime --tag mocca-api:ci .

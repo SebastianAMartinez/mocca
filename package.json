@@ -3,7 +3,7 @@
 	"version": "0.0.0",
 	"private": true,
 	"scripts": {
-		"check": "pnpm format:check && pnpm lint && pnpm typecheck",
+		"check": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test",
 		"changeset": "changeset",
 		"format": "biome format --write .",
 		"format:check": "biome format .",
@@ -11,6 +11,7 @@
 		"prepare": "husky",
 		"release": "changeset publish",
 		"typecheck": "pnpm --recursive --if-present run typecheck",
+		"test": "pnpm --recursive --if-present run test",
 		"version-packages": "changeset version"
 	},
 	"devEngines": {

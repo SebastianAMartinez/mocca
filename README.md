@@ -160,6 +160,12 @@ sudo bash ops/restore-check-production.sh
 
 The restore check restores PostgreSQL into an isolated container, restores the SeaweedFS archive into a temporary volume, and starts SeaweedFS with networking disabled. It removes the temporary containers and volumes when finished; it does not modify production data. B2 access and valid backup snapshots are required for the check. Backups do not include `.env.production` or `/etc/mocca-backup.env`; keep those files' secrets, the Restic repository password, and provider credentials in a secure off-server password manager. A disaster recovery also needs the runtime database role recreated with the saved `.env.production` values before restoring the database.
 
+### Production delivery and database rollback policy
+
+Production delivery automation is planned for v0.2. The intended flow is for CI to test and build the API and migration images, publish immutable commit-SHA tags to GitHub Container Registry, deploy the selected image to the Droplet, apply migrations before replacing the API, and verify `/health` after rollout. Deployment must use a dedicated SSH key and a narrowly scoped server-side deploy command; do not grant GitHub Actions general root SSH access or Docker socket access.
+
+Database migrations are forward-only; Drizzle migrations do not provide automatic down migrations. Use an expand-and-contract approach: first add backward-compatible schema changes, deploy code that can work with both old and new schema, migrate existing data as a separately reviewed operation, and remove obsolete schema only in a later deployment after the previous API image is no longer a rollback candidate. Before any production migration, take and verify a PostgreSQL backup. If a rollout fails, first roll the API image back only when it remains compatible with the migrated schema. Restoring the database from backup is a last resort because it discards writes made after that backup and requires an explicit operator decision.
+
 Install and enable the daily backup and weekly retention/integrity timers:
 
 ```bash
@@ -282,6 +288,14 @@ Establish the project structure and deployment foundation.
 ### v0.2: MVP
 
 Build the smallest useful version of Mocca and install it on both phones.
+
+#### CI and production delivery
+
+- [ ] Run workspace tests and production server/image build checks in required CI
+- [ ] Publish immutable API and migration images to GitHub Container Registry
+- [ ] Deploy images to the Droplet through a restricted deployment identity
+- [ ] Apply forward-only, backward-compatible migrations before API rollout
+- [ ] Verify production health after deployment and document image rollback and database restore procedures
 
 #### Authentication and shared space
 
