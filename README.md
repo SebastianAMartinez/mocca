@@ -6,7 +6,7 @@ The project is also a practical exercise in building and operating a production-
 
 ## Current Status
 
-Mocca is in the `v0.1` foundation phase. The monorepo, root tooling, CI workflow, Expo app, and Fastify/tRPC server are in place. The Drizzle database package defines the Better Auth schema, and local PostgreSQL runs under Docker Compose alongside SeaweedFS. Migrations configure default CRUD privileges for new public tables created by the migration role, while the server uses a dedicated least-privilege role. Expo sign-in with Google and Apple, protected routes, and sign-out work against the development API. The shared package workspace and root export are set up; shared domain contracts will be added when features need them. The production stack now runs behind Caddy at `mocca-api.sebastianamartinez.com`, with its health endpoint verified through Cloudflare. Application features and backup/restore processes remain outstanding.
+Mocca is in the `v0.1` foundation phase. The monorepo, root tooling, CI workflow, Expo app, and Fastify/tRPC server are in place. The Drizzle database package defines the Better Auth schema, and local PostgreSQL runs under Docker Compose alongside SeaweedFS. Migrations configure default CRUD privileges for new public tables created by the migration role, while the server uses a dedicated least-privilege role. Expo sign-in with Google and Apple, protected routes, and sign-out work against the development API. The shared package workspace and root export are set up; shared domain contracts will be added when features need them. The production stack runs behind Caddy at `mocca-api.sebastianamartinez.com`, and a SHA-pinned API image has been deployed through the restricted SSH command. B2 backups and isolated restore checks have succeeded, and scheduled backup and retention timers are enabled. Changesets release automation is configured but has not yet completed a release; automated production deployment remains disabled. Application features remain outstanding.
 
 ## Architecture
 
@@ -283,7 +283,7 @@ sudo systemctl enable --now mocca-backup.timer mocca-backup-prune.timer
 systemctl list-timers 'mocca-backup*'
 ```
 
-Daily backups keep seven daily, four weekly, and twelve monthly snapshots. The weekly job prunes unused Restic data and checks a 10% subset of repository data. Inspect job output with `sudo journalctl -u mocca-backup.service` and `sudo journalctl -u mocca-backup-prune.service`. Keep the backup/restore roadmap item open until a B2 backup and isolated restore check both succeed.
+Daily backups keep seven daily, four weekly, and twelve monthly snapshots. The weekly job prunes unused Restic data and checks a 10% subset of repository data. Inspect job output with `sudo journalctl -u mocca-backup.service` and `sudo journalctl -u mocca-backup-prune.service`. A B2 backup and isolated restore check have succeeded, and the timers are enabled; continue monitoring their runs and periodically repeat restore checks.
 
 ### Database schema and migrations
 
