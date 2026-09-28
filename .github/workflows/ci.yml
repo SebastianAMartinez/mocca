@@ -70,3 +70,56 @@ jobs:
           push: true
           tags: ghcr.io/sebastianamartinez/mocca-api:sha-${{ github.sha }}
           labels: org.opencontainers.image.source=https://github.com/${{ github.repository }}
+
+  deploy-production-api:
+    name: Deploy production API
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.MOCCA_PRODUCTION_DEPLOY_ENABLED == 'true'
+    needs:
+      - checks
+      - publish-api
+    runs-on: ubuntu-latest
+    environment: production
+    permissions:
+      contents: read
+    concurrency:
+      group: production-api-deploy
+      cancel-in-progress: false
+    steps:
+      - name: Prepare restricted SSH credentials
+        env:
+          DEPLOY_HOST: ${{ vars.MOCCA_PRODUCTION_DEPLOY_HOST }}
+          DEPLOY_KNOWN_HOSTS: ${{ vars.MOCCA_PRODUCTION_KNOWN_HOSTS }}
+          DEPLOY_PRIVATE_KEY: ${{ secrets.MOCCA_PRODUCTION_SSH_PRIVATE_KEY }}
+        run: |
+          set -Eeuo pipefail
+
+          [[ "$DEPLOY_HOST" =~ ^[A-Za-z0-9.-]+$ ]] || { echo "Invalid or missing production host" >&2; exit 1; }
+          [[ "$GITHUB_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo "Invalid commit SHA" >&2; exit 1; }
+          [[ -n "$DEPLOY_PRIVATE_KEY" ]] || { echo "Missing production SSH private key secret" >&2; exit 1; }
+          [[ -n "$DEPLOY_KNOWN_HOSTS" ]] || { echo "Missing pinned SSH known_hosts variable" >&2; exit 1; }
+
+          install -d -m 0700 "$RUNNER_TEMP/mocca-ssh"
+          printf '%s\n' "$DEPLOY_PRIVATE_KEY" > "$RUNNER_TEMP/mocca-ssh/id_ed25519"
+          printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > "$RUNNER_TEMP/mocca-ssh/known_hosts"
+          chmod 0600 "$RUNNER_TEMP/mocca-ssh/id_ed25519" "$RUNNER_TEMP/mocca-ssh/known_hosts"
+          unset DEPLOY_PRIVATE_KEY
+
+          ssh-keygen -F "$DEPLOY_HOST" -f "$RUNNER_TEMP/mocca-ssh/known_hosts" >/dev/null || {
+            echo "Pinned host key does not contain the configured production host" >&2
+            exit 1
+          }
+      - name: Deploy published API image
+        env:
+          DEPLOY_HOST: ${{ vars.MOCCA_PRODUCTION_DEPLOY_HOST }}
+        run: |
+          set -Eeuo pipefail
+          ssh \
+            -i "$RUNNER_TEMP/mocca-ssh/id_ed25519" \
+            -o IdentitiesOnly=yes \
+            -o BatchMode=yes \
+            -o ConnectTimeout=15 \
+            -o StrictHostKeyChecking=yes \
+            -o UserKnownHostsFile="$RUNNER_TEMP/mocca-ssh/known_hosts" \
+            -o GlobalKnownHostsFile=/dev/null \
+            "mocca-deploy@$DEPLOY_HOST" \
+            "deploy $GITHUB_SHA"
