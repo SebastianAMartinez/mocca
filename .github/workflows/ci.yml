@@ -37,12 +37,58 @@ jobs:
         run: pnpm --filter @mocca/server build
 
       - name: Build production API image
+        if: github.event_name == 'pull_request'
         run: docker build --file apps/server/Dockerfile --target runtime --tag mocca-api:ci .
+
+  changesets:
+    name: Create version PR or publish release tags
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.MOCCA_CHANGESETS_APP_ID != ''
+    needs: checks
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      published: ${{ steps.changesets.outputs.published }}
+      packages: ${{ steps.changesets.outputs.published-packages }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7.0.1
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v6.1.0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7.0.0
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Create Changesets GitHub App token
+        id: changesets-token
+        uses: actions/create-github-app-token@v3.2.0
+        with:
+          client-id: ${{ vars.MOCCA_CHANGESETS_APP_ID }}
+          private-key: ${{ secrets.MOCCA_CHANGESETS_APP_PRIVATE_KEY }}
+          permission-contents: write
+          permission-pull-requests: write
+
+      - name: Version packages or publish private package tags
+        id: changesets
+        uses: changesets/action@v2.1.2
+        with:
+          github-token: ${{ steps.changesets-token.outputs.token }}
+          publish-script: pnpm release
+          create-github-releases: true
 
   publish-api:
     name: Publish production API image
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    needs: checks
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.changesets.outputs.published == 'true' && contains(needs.changesets.outputs.packages, '@mocca/server')
+    needs:
+      - checks
+      - changesets
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -61,6 +107,14 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Read released API version
+        id: api-version
+        run: |
+          set -Eeuo pipefail
+          api_version=$(node -e 'console.log(JSON.parse(require("node:fs").readFileSync("apps/server/package.json", "utf8")).version)')
+          [[ "$api_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$ ]]
+          printf 'version=%s\n' "$api_version" >> "$GITHUB_OUTPUT"
+
       - name: Build and publish API image
         uses: docker/build-push-action@v7.4.0
         with:
@@ -68,14 +122,17 @@ jobs:
           file: apps/server/Dockerfile
           target: runtime
           push: true
-          tags: ghcr.io/sebastianamartinez/mocca-api:sha-${{ github.sha }}
+          tags: |
+            ghcr.io/sebastianamartinez/mocca-api:sha-${{ github.sha }}
+            ghcr.io/sebastianamartinez/mocca-api:v${{ steps.api-version.outputs.version }}
           labels: org.opencontainers.image.source=https://github.com/${{ github.repository }}
 
   deploy-production-api:
     name: Deploy production API
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.MOCCA_PRODUCTION_DEPLOY_ENABLED == 'true'
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.MOCCA_PRODUCTION_DEPLOY_ENABLED == 'true' && needs.changesets.outputs.published == 'true' && contains(needs.changesets.outputs.packages, '@mocca/server')
     needs:
       - checks
+      - changesets
       - publish-api
     runs-on: ubuntu-latest
     environment: production

@@ -162,7 +162,27 @@ The restore check restores PostgreSQL into an isolated container, restores the S
 
 ### Production delivery and database rollback policy
 
-CI runs workspace tests, type checks, server compilation, and a production API image build for pushes and pull requests. After those checks pass on `main`, a separate job publishes the API image to the private GitHub Container Registry package `ghcr.io/sebastianamartinez/mocca-api`, tagged with the full commit SHA. The image links back to this repository. A root-only API deployment script and restricted SSH command are provided in `ops/`; automated GitHub Actions deployment and a separately published migration image are not configured yet. Do not grant GitHub Actions general root SSH access or Docker socket access.
+CI runs workspace tests, type checks, and server compilation on pushes and pull requests. Pull requests also build the production API image for validation. Changesets creates a version PR after changesets reach `main`; after that PR is merged, the private server package receives a version tag and GitHub Release, and CI publishes SHA-pinned and semantic-versioned API images to `ghcr.io/sebastianamartinez/mocca-api`. Production deployment runs only for an API package release and only when explicitly enabled. Do not grant GitHub Actions general root SSH access or Docker socket access.
+
+For an API change that should be released, run `pnpm changeset`, select `@mocca/server`, choose the semantic version bump, and include a concise summary. Commit the generated file in `.changeset/` with the feature PR. Changesets opens or updates a `Version Packages` PR after the feature PR merges to `main`; review the generated package version and changelog before merging it. That merge creates the private package release tag and GitHub Release. CI then publishes the API image tagged with both the commit SHA and `v<server-version>`. Changes that should not produce a release do not need a changeset. API-affecting changes in shared packages should include an `@mocca/server` changeset so the API image gets a new semantic version.
+
+The Changesets workflow uses a GitHub App token so version PRs receive normal CI runs. Create a GitHub App for this repository with **Contents: Read and write** and **Pull requests: Read and write** permissions, install it only for this repository, and generate a private key. In **Settings > Actions > General**, allow GitHub Actions to create and approve pull requests. Configure these repository-level values without committing the private key:
+
+| Name | Type | Value |
+| --- | --- | --- |
+| `MOCCA_CHANGESETS_APP_ID` | Variable | The GitHub App's numeric App ID |
+| `MOCCA_CHANGESETS_APP_PRIVATE_KEY` | Secret | The generated GitHub App private key PEM |
+
+Set the App ID as a repository variable and pipe the downloaded private-key file directly into the secret command; do not print the key:
+
+```bash
+gh variable set MOCCA_CHANGESETS_APP_ID --body '<app-id>'
+gh secret set MOCCA_CHANGESETS_APP_PRIVATE_KEY < /path/to/mocca-changesets.private-key.pem
+```
+
+The release job is skipped while `MOCCA_CHANGESETS_APP_ID` is unset. Once configured, a missing or invalid App private key causes the release job to fail visibly. The App token is limited to this repository and the permissions listed above.
+
+The production deploy switch remains separate and defaults to disabled. A version release publishes its image even while deployments are disabled; production deploys only when `MOCCA_PRODUCTION_DEPLOY_ENABLED` is exactly `true` and any configured production environment approval is granted.
 
 #### Restricted API deployment
 
@@ -197,7 +217,7 @@ This performs a real production API deployment. Do not use an arbitrary or unver
 
 #### Automated GitHub Actions deployment
 
-The `deploy-production-api` job runs only on pushes to `main`, after repository checks and image publishing succeed. It remains disabled unless the repository variable `MOCCA_PRODUCTION_DEPLOY_ENABLED` is exactly `true`. Before enabling it, create the `production` environment under **Settings > Environments**, restrict it to the `main` branch, and optionally add required reviewers. Add these environment-scoped values:
+The `deploy-production-api` job runs only after Changesets publishes a release containing `@mocca/server` and the matching SHA-tagged image is available. It remains disabled unless the repository variable `MOCCA_PRODUCTION_DEPLOY_ENABLED` is exactly `true`. Before enabling it, create the `production` environment under **Settings > Environments**, restrict it to the `main` branch, and optionally add required reviewers. Add these environment-scoped values:
 
 | Name | Type | Value |
 | --- | --- | --- |
