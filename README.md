@@ -193,7 +193,64 @@ After installing the account and key, a manual rollout uses:
 ssh mocca-deploy@<droplet-host> deploy <full-40-character-commit-sha>
 ```
 
-This performs a real production API deployment. Do not use an arbitrary or unverified SHA. Automated deployment should be added separately using a GitHub environment and this restricted SSH key, with host-key verification enabled.
+This performs a real production API deployment. Do not use an arbitrary or unverified SHA.
+
+#### Automated GitHub Actions deployment
+
+The `deploy-production-api` job runs only on pushes to `main`, after repository checks and image publishing succeed. It remains disabled unless the repository variable `MOCCA_PRODUCTION_DEPLOY_ENABLED` is exactly `true`. Before enabling it, create the `production` environment under **Settings > Environments**, restrict it to the `main` branch, and optionally add required reviewers. Add these environment-scoped values:
+
+| Name | Type | Value |
+| --- | --- | --- |
+| `MOCCA_PRODUCTION_DEPLOY_HOST` | Variable | Droplet IP or DNS hostname, without a port |
+| `MOCCA_PRODUCTION_KNOWN_HOSTS` | Variable | The verified SSH `known_hosts` line for that host |
+| `MOCCA_PRODUCTION_SSH_PRIVATE_KEY` | Secret | Dedicated private key whose public key is in the restricted account's `authorized_keys` |
+
+The workflow uses port 22 and requires strict host-key checking. To obtain the host key safely, first read the Ed25519 fingerprint directly from the Droplet through its trusted admin session:
+
+```bash
+sudo ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub
+```
+
+On your local machine, collect the key and calculate its fingerprint:
+
+```bash
+ssh-keyscan -t ed25519 192.241.144.159 2>/dev/null > ~/.ssh/mocca-production-known_hosts
+awk '{ print $2, $3 }' ~/.ssh/mocca-production-known_hosts | ssh-keygen -lf /dev/stdin
+```
+
+Compare the fingerprints exactly. Only after they match, set the host and known-hosts variables (replace the example IP if it changes):
+
+```bash
+gh variable set MOCCA_PRODUCTION_DEPLOY_HOST --env production --body 192.241.144.159
+gh variable set MOCCA_PRODUCTION_KNOWN_HOSTS --env production < ~/.ssh/mocca-production-known_hosts
+```
+
+The key must be usable non-interactively by the GitHub-hosted runner. If your manual key has a passphrase, create a separate CI key with no passphrase, and add its public key as another forced-command key for `mocca-deploy`:
+
+```bash
+ssh-keygen -t ed25519 -N "" -f ~/.ssh/mocca-actions-deploy -C "mocca GitHub Actions deploy"
+cat ~/.ssh/mocca-actions-deploy.pub
+```
+
+On the Droplet, append that public-key line to `/home/mocca-deploy/.ssh/authorized_keys` with the same `restrict,command="/usr/local/sbin/mocca-deploy-ssh-command"` prefix as the manual key. Then, locally, save the private key directly as an environment secret; this command does not print it:
+
+```bash
+gh secret set MOCCA_PRODUCTION_SSH_PRIVATE_KEY --env production < ~/.ssh/mocca-actions-deploy
+```
+
+If the manual key has no passphrase and you prefer to reuse it, substitute `~/.ssh/mocca-deploy` above. Do not enable deployment until the environment, host-key pin, and key are configured and a manual restricted-key deployment has succeeded. Enable automatic deployment with this repository-level variable as the final step:
+
+```bash
+gh variable set MOCCA_PRODUCTION_DEPLOY_ENABLED --body true
+```
+
+From then on, each successful push to `main` will publish and deploy that exact commit's API image. To pause automatic deployment:
+
+```bash
+gh variable set MOCCA_PRODUCTION_DEPLOY_ENABLED --body false
+```
+
+Check deployment runs with `gh run list --workflow ci.yml --branch main`. The workflow does not run migrations; database changes remain a separate reviewed operation with a verified backup first.
 
 Database migrations are forward-only; Drizzle migrations do not provide automatic down migrations. Use an expand-and-contract approach: first add backward-compatible schema changes, deploy code that can work with both old and new schema, migrate existing data as a separately reviewed operation, and remove obsolete schema only in a later deployment after the previous API image is no longer a rollback candidate. Before any production migration, take and verify a PostgreSQL backup. If a rollout fails, first roll the API image back only when it remains compatible with the migrated schema. Restoring the database from backup is a last resort because it discards writes made after that backup and requires an explicit operator decision.
 
