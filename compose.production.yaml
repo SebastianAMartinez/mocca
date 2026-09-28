@@ -69,6 +69,7 @@ services:
       - backend
 
   api:
+    image: ${MOCCA_API_IMAGE:-mocca-api:local}
     build:
       context: .
       dockerfile: apps/server/Dockerfile

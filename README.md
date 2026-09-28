@@ -162,7 +162,38 @@ The restore check restores PostgreSQL into an isolated container, restores the S
 
 ### Production delivery and database rollback policy
 
-CI runs workspace tests, type checks, server compilation, and a production API image build for pushes and pull requests. After those checks pass on `main`, a separate job publishes the API image to the private GitHub Container Registry package `ghcr.io/sebastianamartinez/mocca-api`, tagged with the full commit SHA. The image links back to this repository. Droplet deployment and a separately published migration image remain planned v0.2 work. The intended deployment flow applies migrations before replacing the API and verifies `/health` after rollout. Deployment must use a dedicated SSH key and a narrowly scoped server-side deploy command; do not grant GitHub Actions general root SSH access or Docker socket access.
+CI runs workspace tests, type checks, server compilation, and a production API image build for pushes and pull requests. After those checks pass on `main`, a separate job publishes the API image to the private GitHub Container Registry package `ghcr.io/sebastianamartinez/mocca-api`, tagged with the full commit SHA. The image links back to this repository. A root-only API deployment script and restricted SSH command are provided in `ops/`; automated GitHub Actions deployment and a separately published migration image are not configured yet. Do not grant GitHub Actions general root SSH access or Docker socket access.
+
+#### Restricted API deployment
+
+The API deployer accepts only `deploy <full-40-character-commit-sha>` over SSH. Its forced-command handler passes only the validated SHA to one sudo-allowed root script. The script requires the current API to be healthy, pulls the matching immutable GHCR image, updates only the API with Compose, waits up to three minutes for its health check, and attempts to restore the previous healthy image if rollout fails. It does not run migrations or modify PostgreSQL, SeaweedFS, or Caddy. Keep migrations as a separate reviewed operation under the database rollback policy above.
+
+Provision the restricted account on the Droplet as an administrator. From a checkout at `/home/sebastian/mocca`, install the root-owned scripts and allow only the deployment entry point through sudo:
+
+```bash
+sudo adduser --disabled-password --gecos "" mocca-deploy
+sudo install -o root -g root -m 0755 ops/deploy-production-api.sh /usr/local/sbin/mocca-deploy-production-api
+sudo install -o root -g root -m 0755 ops/mocca-deploy-ssh-command.sh /usr/local/sbin/mocca-deploy-ssh-command
+printf '%s\n' 'mocca-deploy ALL=(root) NOPASSWD: /usr/local/sbin/mocca-deploy-production-api' | sudo tee /etc/sudoers.d/mocca-deploy >/dev/null
+sudo chmod 0440 /etc/sudoers.d/mocca-deploy
+sudo visudo -cf /etc/sudoers.d/mocca-deploy
+sudo install -d -o mocca-deploy -g mocca-deploy -m 0700 /home/mocca-deploy/.ssh
+sudoedit /home/mocca-deploy/.ssh/authorized_keys
+sudo chown mocca-deploy:mocca-deploy /home/mocca-deploy/.ssh/authorized_keys
+sudo chmod 0600 /home/mocca-deploy/.ssh/authorized_keys
+```
+
+Add only the dedicated deployment public key to `authorized_keys`, prefixed with `restrict,command="/usr/local/sbin/mocca-deploy-ssh-command"`. Do not reuse a personal SSH key. The SSH account should have no other authorized keys or interactive access. The sudo rule names only the root-owned deploy script; the script also refuses command-line arguments.
+
+The deploy script runs Docker as root, so authenticate the root Docker CLI to GHCR on the Droplet with a token that can read the private package. Run `sudo docker login ghcr.io --username <github-user>` and enter the token only at Docker's password prompt. Protect root's Docker credential configuration as a secret. The production checkout and `.env.production` must remain at the paths used by the script (`/home/sebastian/mocca`); the script reads but does not print the environment file.
+
+After installing the account and key, a manual rollout uses:
+
+```bash
+ssh mocca-deploy@<droplet-host> deploy <full-40-character-commit-sha>
+```
+
+This performs a real production API deployment. Do not use an arbitrary or unverified SHA. Automated deployment should be added separately using a GitHub environment and this restricted SSH key, with host-key verification enabled.
 
 Database migrations are forward-only; Drizzle migrations do not provide automatic down migrations. Use an expand-and-contract approach: first add backward-compatible schema changes, deploy code that can work with both old and new schema, migrate existing data as a separately reviewed operation, and remove obsolete schema only in a later deployment after the previous API image is no longer a rollback candidate. Before any production migration, take and verify a PostgreSQL backup. If a rollout fails, first roll the API image back only when it remains compatible with the migrated schema. Restoring the database from backup is a last resort because it discards writes made after that backup and requires an explicit operator decision.
 
