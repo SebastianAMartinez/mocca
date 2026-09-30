@@ -1,338 +1,51 @@
 # Mocca Development Instructions
 
-## Project Overview
+## Product Direction
 
-Mocca is a cross-platform shared memory and moments application built as a portfolio-quality software project.
+Mocca is a small shared-memory app for two people to exchange notes, photos, and everyday moments. Keep the product simple and finish the useful core before adding advanced engineering. The product roadmap and current milestones are maintained in `README.md`; operational procedures are maintained in `operations.md`.
 
-The project is structured as a pnpm monorepo and will eventually contain:
+Do not implement notes, photos, shared spaces, widgets, or later-roadmap features unless explicitly requested. Do not introduce infrastructure such as Redis, Kafka, Kubernetes, or microservices without a demonstrated need.
 
-* React Native / Expo mobile application
-* Fastify backend
-* tRPC API layer
-* Self-hosted PostgreSQL database
-* Drizzle ORM
-* Better Auth authentication with Google and Apple social sign-in
-* Shared TypeScript packages
-* iOS widgets
-* Automated testing and CI
+## Workspace Boundaries
 
-The goal is to build Mocca as a realistic production-style application rather than a tutorial project.
+- `apps/mobile`: Expo and React Native UI, navigation, client state, API consumption, and device behavior.
+- `apps/server`: Fastify, tRPC, authentication verification, authorization, validation, and business logic.
+- `packages/db`: Drizzle schema, migrations, database client, and database utilities.
+- `packages/shared`: Contracts and utilities genuinely shared by multiple workspaces.
+- `ops`: Production deployment, backup, restore, and service definitions.
 
-## Repository Structure
+Keep code in the workspace that owns it. Do not use `packages/shared` as a general dumping ground.
 
-The repository uses the following structure:
+## Architecture and Security
 
-```text
-mocca/
-├── .github/
-│   ├── copilot-instructions.md
-│   └── workflows/
-├── apps/
-│   ├── mobile/
-│   └── server/
-├── packages/
-│   ├── db/
-│   └── shared/
-├── package.json
-├── pnpm-lock.yaml
-├── pnpm-workspace.yaml
-└── README.md
-```
+The intended request path is Expo -> tRPC -> Fastify -> Drizzle -> PostgreSQL. Better Auth provides Google and Apple sign-in. Authentication and authorization are separate: never trust the client to decide whether a user may access another user's data. Enforce shared-space membership on the server.
 
-### Workspace Responsibilities
+Never hard-code or print API keys, passwords, database credentials, authentication secrets, private keys, or tokens. Keep secrets in ignored environment files or provider secret stores. Do not read or display environment-file contents wholesale.
 
-#### apps/mobile
+For production releases, deployment, migrations, backups, or restores, follow `operations.md` and load the `production-operations` skill. Never run destructive production commands or deploy automatically unless the user explicitly requests it.
 
-The React Native / Expo application.
+## Engineering Rules
 
-Responsible for:
+- Use pnpm exclusively and add dependencies to the workspace that owns them.
+- Use strict TypeScript; avoid `any`, unnecessary assertions, duplicated types, and unexplained suppressions.
+- Prefer readable, small modules and existing project patterns over new abstractions.
+- Add dependencies only when existing libraries, platform APIs, or standard TypeScript cannot reasonably solve the problem.
+- Treat tests as part of feature development. Prioritize authorization, shared-space isolation, API contracts, and important mobile flows.
+- Use conventional commit messages and keep each commit focused on one logical change.
+- Work on short-lived branches and open pull requests into `main`; do not commit or push unless requested.
 
-* Mobile UI
-* Navigation
-* Client-side state
-* Authentication UI
-* API consumption
-* Local device functionality
-* Photos
-* iOS widgets
-* Mobile-specific behavior
+## Working Process
 
-Do not place backend, database, or server logic here.
+1. Inspect the relevant owning code and nearby tests or call sites.
+2. Make the smallest change that satisfies the requested milestone.
+3. Do not modify unrelated files or implement future roadmap work.
+4. Run the narrowest relevant check, then `pnpm check` when the change warrants the full repository gate.
+5. Report changed files, validation results, and any follow-up without implementing unrequested work.
 
-#### apps/server
+Ask before making a decision that materially changes architecture, data design, authorization, or production operations. When several approaches are valid, explain the tradeoff briefly and prefer the simpler option consistent with the current codebase.
 
-The Fastify backend.
+## Current Direction
 
-Responsible for:
+The foundation is in place: Expo, Fastify/tRPC, PostgreSQL/Drizzle, Better Auth, CI, production hosting, restricted deployment, and tested backups. Changesets release automation is configured but its first versioned release is not yet verified, so automatic production deployment remains disabled.
 
-* HTTP server
-* tRPC API
-* Authentication verification
-* Authorization
-* Business logic
-* Server-side validation
-* Communication with the database
-
-Do not place React Native or UI code here.
-
-#### packages/db
-
-Database infrastructure.
-
-Responsible for:
-
-* Drizzle configuration
-* Database client
-* Database schema
-* Database migrations
-* Database-related utilities
-
-PostgreSQL will be self-hosted with Docker Compose.
-
-Do not place UI or API route logic here.
-
-#### packages/shared
-
-Code genuinely shared between applications.
-
-Examples include:
-
-* Shared TypeScript types
-* Shared constants
-* Shared validation schemas when appropriate
-* Domain-level utilities
-
-Do not use this package as a dumping ground for unrelated code.
-
-## Package Management
-
-Use pnpm exclusively.
-
-Do not introduce npm or yarn commands.
-
-Use workspace dependencies when packages depend on each other.
-
-Prefer:
-
-```bash
-pnpm add <package> --filter <workspace>
-```
-
-and:
-
-```bash
-pnpm add -D <package> --filter <workspace>
-```
-
-Do not install application-specific dependencies in the repository root unless they are genuinely repository-wide development dependencies.
-
-## TypeScript
-
-The project uses TypeScript throughout the JavaScript/TypeScript codebase.
-
-Prefer strict TypeScript configuration.
-
-Avoid:
-
-* `any`
-* unnecessary type assertions
-* duplicated types
-* implicit `any`
-* suppressing TypeScript errors without a documented reason
-
-Favor clear, explicit types and reusable domain types.
-
-## Code Quality
-
-Write production-quality code appropriate for an entry-level to mid-level software engineer.
-
-Prioritize:
-
-* Readability
-* Maintainability
-* Simplicity
-* Strong typing
-* Small modules
-* Clear naming
-* Separation of concerns
-* Testability
-
-Do not over-engineer simple functionality.
-
-Avoid unnecessary abstractions, design patterns, dependencies, or frameworks.
-
-## Architecture
-
-Follow the architecture established in the project roadmap.
-
-The intended high-level architecture is:
-
-```text
-React Native / Expo
-        │
-        ▼
-      tRPC
-        │
-        ▼
-     Fastify
-        │
-        ▼
-     Drizzle
-        │
-        ▼
-Self-hosted PostgreSQL
-```
-
-Authentication will use Better Auth with Google and Apple social sign-in.
-
-Authentication and authorization are separate concerns.
-
-The client must never be trusted to determine whether a user is allowed to access another user's data.
-
-Authorization must ultimately be enforced on the server.
-
-## Development Workflow
-
-Work incrementally.
-
-Before making changes:
-
-1. Inspect the existing repository structure.
-2. Read relevant configuration files.
-3. Determine whether the requested functionality already exists.
-4. Make the smallest reasonable change.
-5. Run the appropriate checks.
-6. Report what changed and what was verified.
-
-Do not rewrite existing files unnecessarily.
-
-Do not modify unrelated files.
-
-Do not introduce dependencies without explaining why they are needed.
-
-## Roadmap Discipline
-
-The project follows a staged roadmap.
-
-Do not implement future roadmap features unless explicitly requested.
-
-The monorepo foundation is in place; continue with the remaining roadmap stages incrementally.
-
-The initial infrastructure sequence is:
-
-1. pnpm workspace
-2. Root configuration
-3. TypeScript
-4. Biome
-5. GitHub Actions CI
-6. Expo mobile application
-7. Fastify server
-8. Shared package
-9. Database package
-10. Workspace dependencies
-11. Authentication
-12. Database
-13. API
-14. Application features
-15. Testing
-16. iOS widgets
-
-Do not skip ahead simply because a future feature is technically possible.
-
-## Git
-
-Use conventional commit-style messages.
-
-Examples:
-
-```text
-chore: initialize monorepo
-chore: configure typescript
-chore: add biome
-ci: add repository checks
-feat: add authentication
-fix: correct note authorization
-test: add note service tests
-```
-
-Keep commits focused on one logical change.
-
-## Testing
-
-Testing is part of the development process rather than something added at the very end.
-
-When functionality is introduced, consider the appropriate testing level:
-
-* Unit tests for isolated logic
-* Integration tests for server/database behavior
-* API tests for backend contracts
-* End-to-end tests for important user flows
-
-Do not add tests that provide little value simply to increase coverage numbers.
-
-## GitHub Actions
-
-CI should eventually verify that the repository:
-
-* Installs successfully
-* Passes formatting/lint checks
-* Passes TypeScript checks
-* Passes automated tests
-
-CI should use the repository's pnpm configuration and should not use npm or yarn.
-
-## Security
-
-Never hard-code:
-
-* API keys
-* Passwords
-* Database credentials
-* Authentication secrets
-* Private tokens
-
-Use environment variables and appropriate `.env` files.
-
-Never commit secrets.
-
-Environment files containing secrets must be included in `.gitignore`.
-
-## Dependency Decisions
-
-Before adding a dependency, determine whether the functionality can reasonably be implemented using:
-
-* Existing project dependencies
-* Platform APIs
-* Standard TypeScript/JavaScript functionality
-
-Prefer established, actively maintained dependencies when one is necessary.
-
-Do not add a dependency simply for convenience if it creates unnecessary complexity.
-
-## Copilot Behavior
-
-Act as a development assistant, not as an autonomous project manager.
-
-When given a task:
-
-1. Explain the intended change briefly.
-2. Inspect the relevant files.
-3. Implement only the requested scope.
-4. Run appropriate validation.
-5. Report the files changed.
-6. Report validation results.
-7. Mention any follow-up work without implementing it automatically.
-
-If requirements are ambiguous and the ambiguity could materially affect architecture or data design, ask before implementing.
-
-Do not silently make major architectural decisions.
-
-Do not create large amounts of boilerplate without explaining its purpose.
-
-When multiple reasonable approaches exist, briefly explain the tradeoff and use the approach consistent with this project's architecture.
-
-## Current Stage
-
-The monorepo foundation, Expo mobile app, Fastify server, and local database infrastructure are in place. Better Auth supports Google and Apple sign-in from the Expo app, session persistence, protected routes, and sign-out against the development API.
-
-The development API uses a named Cloudflare Tunnel. Production uses a separate Docker Compose stack and database behind Caddy; a SHA-pinned API deployment through the restricted SSH command has been verified. B2 backup and isolated restore checks succeeded, and scheduled backup and retention timers are enabled. Changesets release automation and its GitHub App are configured but the release path has not yet been exercised. Keep automatic production deployment disabled until a versioned release has been verified. Continue the staged roadmap with shared code, authorization, application features, and appropriate tests as those features are introduced. Do not implement notes, photos, shared spaces, or widgets unless explicitly requested.
+Continue with the smallest useful Mocca experience: shared domain contracts, server-enforced membership, notes, photos, and tests in roadmap order. Keep infrastructure maintenance proportional and secondary to the product.
