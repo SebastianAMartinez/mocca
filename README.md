@@ -1,82 +1,84 @@
 # Mocca
 
-Mocca is a mobile app for sharing notes, photos, and everyday moments. It is being built as a small, self-hosted product with a focus on reliable authentication, server-enforced authorization, and tested operations.
+Mocca is a private mobile app for sharing notes, photos, and everyday moments with someone you care about.
+
+The goal is simple: build a small, polished app that makes staying connected feel more personal than a normal messaging app. The project is also a way to learn modern full-stack and mobile development by building and maintaining the product myself.
+
+## What Mocca Is
+
+Mocca is built around a shared space between two people. Each person can add notes, photos, reactions, and other small updates that the other person can see.
+
+The initial version is intentionally small. The focus is on making the core experience work well before adding more advanced features.
+
+### Core ideas
+
+- Shared notes between two people
+- Photos and shared memories
+- Simple reactions
+- A private shared space
+- iOS widgets for quick access to the relationship and recent activity
+- A simple, focused mobile experience
 
 ## Current Status
 
-The project has a working foundation: an Expo app, a Fastify/tRPC API, PostgreSQL with Drizzle, and Google and Apple sign-in through Better Auth. The mobile app can sign in, persist its session, access protected routes, and sign out against the development API. Notes, photos, shared spaces, and their authorization rules are not implemented yet.
+The project is currently in the foundation stage.
 
-Production runs behind Caddy. A SHA-pinned API deployment through a restricted SSH command has been verified, as have Backblaze B2 backups and isolated restore checks. Scheduled backup and retention jobs are enabled. Changesets and release automation are configured, but a versioned release has not yet been verified; automatic production deployment remains disabled until it has.
+The monorepo, Expo mobile app, Fastify API, PostgreSQL database, authentication, local development environment, CI, and production deployment foundation are in place. Authentication can be used from the mobile app, but the actual Mocca experience is still being built.
 
-## Architecture
-
-```text
-React Native/Expo
-        |
-        v
-  Fastify + tRPC
-        |
-        v
-  PostgreSQL
-```
-
-SeaweedFS is provisioned for future photo storage.
-
-Better Auth handles Google and Apple sign-in, with session cookies stored by the Expo client in SecureStore. Development API traffic uses a named Cloudflare Tunnel. Production traffic reaches the API through Caddy. The server, not the mobile client, is the security boundary for authorization.
-
-### Infrastructure decisions
-
-The project is self-hosted with Docker Compose. Caddy terminates production HTTPS and forwards traffic to Fastify on the private Docker network. PostgreSQL stores relational data; SeaweedFS is reserved for future object storage. Backup and restore procedures are described in [operations.md](operations.md).
-
-## Repository Structure
-
-```text
-apps/
-  mobile/       Expo and React Native application
-  server/       Fastify server and tRPC API
-
-packages/
-  db/           Drizzle schema, migrations, and database access
-  shared/       Shared TypeScript package
-
-ops/            Production deployment, backup, and restore scripts
-```
-
-Keep code in the workspace that owns its responsibility. Add shared contracts when they are genuinely needed by both mobile and server.
+The next priority is not adding more infrastructure. It is building the first useful version of Mocca.
 
 ## Technology
 
 ### Mobile
 
-- React Native and Expo
+- React Native
+- Expo
 - TypeScript
 - Expo Router
-- EAS Build
+- EAS
 
 ### Server
 
 - Node.js
 - Fastify
 - tRPC
-- Pino logging
+- TypeScript
 
-### Data and authentication
+### Data
 
-- Self-hosted PostgreSQL
+- PostgreSQL
 - Drizzle ORM
-- SeaweedFS for planned S3-compatible object storage
-- Better Auth with Google and Apple social sign-in
 
-### Tooling and infrastructure
+### Authentication
+
+- Better Auth
+- Google Sign-In
+- Apple Sign-In
+
+### Tooling
 
 - pnpm workspaces
 - Biome
-- Node.js `node:test`
-- Changesets
-- Husky and Commitlint
 - GitHub Actions
 - Docker Compose
-- Caddy
+
+Infrastructure is intentionally kept simple. The project is self-hosted, but additional systems should only be introduced when Mocca actually needs them.
+
+## Repository Structure
+
+```text
+apps/
+  mobile/       Expo and React Native application
+  server/       Fastify API
+
+packages/
+  db/           Database schema and access
+  shared/       Shared TypeScript code
+
+ops/            Deployment and operational scripts
+```
+
+The monorepo keeps the mobile app, API, and shared code together without requiring them to be tightly coupled.
 
 ## Development
 
@@ -91,212 +93,165 @@ Install dependencies:
 pnpm install
 ```
 
-Run all repository checks:
+Run repository checks:
 
 ```bash
 pnpm check
 ```
 
-Create the external PostgreSQL volume once if needed, then start local PostgreSQL and SeaweedFS:
+Start the local services:
 
 ```bash
-docker volume create mocca-postgres-data
 docker compose up -d
-docker compose ps
 ```
 
-The root `.env.example` provides local Compose settings. Configure private server and database environment files separately, and copy `apps/mobile/.env.example` to the ignored `apps/mobile/.env.local` for local API configuration. Keep environment files private and do not run `docker compose down --volumes` unless you intend to remove local SeaweedFS data.
-
-Start the API and Expo app in separate terminals:
+Start the API and mobile app in separate terminals:
 
 ```bash
 pnpm --filter @mocca/server dev
 pnpm --filter @mocca/mobile start
 ```
 
-The server development command loads `apps/server/.env`; production deployment uses process environment variables instead. See [operations.md](operations.md) for database migration and production procedures.
-
-## Branch Workflow
-
-`main` is the only long-lived branch. Changes are developed on short-lived branches named for their purpose, such as `feat/expo-mobile`, `fix/note-authorization`, or `chore/update-tooling`.
-
-Open a pull request into `main` for each focused change. The branch must be current with `main`, and the repository checks must pass before merging. Pull requests are squash merged, and GitHub deletes merged branches automatically.
-
-Direct pushes, force pushes, and deletion of `main` are blocked. Approvals are not required while this remains a single-developer project.
-
-## Commits and Releases
-
-Commit messages follow the Conventional Commits format and are checked by Commitlint through a Husky `commit-msg` hook.
-
-Examples:
-
-```text
-chore: initialize monorepo
-feat: add note creation
-fix: enforce shared-space authorization
-test: cover note access rules
-```
-
-Changesets manages package versions and changelogs according to semantic versioning:
-
-- `patch` for backward-compatible fixes
-- `minor` for backward-compatible functionality
-- `major` for breaking changes
-
-Run `pnpm changeset` for changes that should result in a package release. CI creates version PRs and publishes a GitHub Release and API image for server releases. This release path is configured but has not yet completed a versioned release. See [operations.md](operations.md) for the release and deployment gates.
-
-Mobile app versions and iOS build numbers are separate from package versions. EAS will manage build numbers remotely, while human-facing app versions are changed when preparing a release.
+See [operations.md](operations.md) for deployment, database, and backup procedures.
 
 ## Roadmap
 
-### v0.1: Foundations
+The roadmap is organized around the product rather than the infrastructure. Infrastructure work should support a milestone, not become a milestone by itself.
 
-- [x] Configure the pnpm monorepo and root development tools
-- [x] Initialize the Expo mobile application
-- [x] Initialize the Fastify server and tRPC API
-- [x] Create the Drizzle database package and Better Auth schema
-- [x] Set up the shared package workspace and root export
-- [x] Apply the authentication migration locally and configure the least-privilege runtime role
-- [x] Provision the self-hosted server, firewall, and access
-- [x] Configure local PostgreSQL and SeaweedFS with Docker Compose
-- [x] Configure the production Compose stack with Fastify and Caddy
-- [x] Deploy the API behind Caddy and verify its health
-- [x] Configure Google and Apple sign-in and verify the Expo sign-in flow
-- [x] Define and test PostgreSQL and SeaweedFS backup and restore procedures
-- [x] Enable scheduled backups and retention checks
-- [x] Verify SHA-pinned API deployment through the restricted SSH command
-- [x] Configure and verify CI checks and production image builds
-- [x] Configure Changesets release automation
-- [ ] Complete and verify the first versioned release and published API image
+### v0.1: Foundation
+
+Set up everything needed to start building Mocca.
+
+- [x] Set up the pnpm monorepo
+- [x] Initialize the Expo mobile app
+- [x] Initialize the Fastify API
+- [x] Set up PostgreSQL and Drizzle
+- [x] Set up authentication
+- [x] Set up shared packages
+- [x] Set up local development
+- [x] Set up CI and production deployment
+- [x] Set up backups and restore procedures
+- [ ] Complete the first versioned release
 
 ### v0.2: MVP
 
-Build the smallest useful version of Mocca and install it on both phones.
+Build the first version of Mocca that can actually be used by both people.
 
-#### CI and production delivery
+#### Shared space
 
-- [x] Run workspace checks and production server/image build checks in CI
-- [ ] Publish immutable migration images to GitHub Container Registry
-- [x] Confirm the private API image is accessible to the production server
-- [x] Deploy API images through a restricted deployment identity
-- [x] Document and follow the reviewed, forward-only migration and rollback process
-- [x] Verify production health and document API rollback and database restore procedures
-- [ ] Complete and verify the first versioned server release and published API image
-- [ ] Enable automatic production deployment after the versioned release is verified
+- [ ] Sign in on both phones
+- [ ] Create a shared space for two people
+- [ ] Enforce membership-based access
+- [ ] Make sure users cannot access another shared space
 
-#### Authentication and shared space
+#### Notes
 
-- [ ] Authenticate both users
-- [ ] Create a shared space representing the relationship
-- [ ] Enforce membership-based access on the server
-- [ ] Test that users cannot access another shared space
-
-#### Notes and reactions
-
-- [ ] Create, read, update, and delete shared notes
-- [ ] Read notes from both phones
-- [ ] Add basic note reactions
+- [ ] Create shared notes
+- [ ] Edit and delete notes
+- [ ] View notes from both phones
+- [ ] Add basic reactions
 
 #### Photos
 
-- [ ] Upload photos to SeaweedFS using signed object-storage URLs
-- [ ] View uploaded photos
-- [ ] Defer client-side compression until it is needed
+- [ ] Upload photos
+- [ ] View shared photos
+- [ ] Associate photos with the shared space
 
-#### Delivery
+#### First release
 
 - [ ] Create the first TestFlight build
-- [ ] Install the app on both phones
-- [ ] Verify the complete flow between both devices
+- [ ] Install Mocca on both phones
+- [ ] Test the complete shared experience
 
-Tests will be added with each feature. Initial coverage should focus on authentication, authorization, shared-space isolation, and note behavior.
+Tests will be added as features are built, with priority given to authentication, authorization, shared-space isolation, and core note behavior.
 
-### v1.0: Reliable Release
+### v1.0: Reliable Mocca
 
-Prepare Mocca for regular use.
+Make the app reliable enough for regular everyday use.
 
-- [ ] Configure EAS Update for JavaScript and asset updates
-- [ ] Add Sentry to the mobile app and server
-- [ ] Review structured Pino logging
-- [x] Automate PostgreSQL and SeaweedFS backups with scheduled jobs
-- [x] Test isolated PostgreSQL and SeaweedFS restore procedures
-- [ ] Add push notifications for new notes
-- [ ] Configure rate limiting, security headers, and production CORS
-- [ ] Validate all API input on the server
-- [ ] Expand backend and mobile test coverage for important flows
-- [ ] Add the app icon, splash screen, theming, and consistent UI states
+- [ ] Improve the UI and empty/loading/error states
+- [ ] Add push notifications
+- [ ] Add iOS widgets
+- [ ] Add EAS Update
+- [ ] Add error reporting
+- [ ] Expand automated test coverage
+- [ ] Add production security and rate limiting
+- [ ] Add app icon, splash screen, and final theming
+- [ ] Establish a regular release process
 
-### v1.1: Quality of Life
+### v1.1: More Ways to Connect
 
-Add features that make the app more personal and useful day to day.
+Add features that make Mocca more useful and personal without changing its core purpose.
 
 - [ ] "Thinking of you" notifications
 - [ ] Daily questions and quick status updates
 - [ ] "On my way" status
 - [ ] Photo gallery and shared memories timeline
-- [ ] Photo compression with `expo-image-manipulator`
-- [ ] Reactions on photos and memories
+- [ ] Photo reactions
 - [ ] "Open when..." messages
-- [ ] Pull-to-refresh and polling for shared updates
-- [ ] First complete user-facing changelog
+- [ ] Pull-to-refresh and background updates
+- [ ] User-facing changelog
 
-### v2.0: Advanced Engineering
+### v2.0: Advanced Features
 
-Introduce more complex systems only when they solve a demonstrated problem or support a specific learning goal.
+Only introduce more complex systems when they solve a real problem or support a specific learning goal.
 
-- [ ] Replace polling with server-sent events when real-time updates are needed
-- [ ] Add persisted queries, local caching, and offline changes
-- [ ] Define conflict resolution for concurrent offline edits
-- [ ] Evaluate a small set of useful PostHog events
-- [ ] Add shared visit dates, countdowns, and optional location features
-- [ ] Add small, self-contained games or prompts
+- [ ] Real-time updates when needed
+- [ ] Local caching and offline support
+- [ ] Conflict handling for offline edits
+- [ ] Shared visit dates and countdowns
+- [ ] Optional location features
+- [ ] Small games and prompts
+- [ ] Usage analytics for improving the app
 
-### v3.0 and Later
+### Future
 
-Keep larger optional features out of the critical path until the core app is stable.
+Ideas that are intentionally kept out of the critical path until the core experience is stable.
 
-- [ ] iOS widgets
 - [ ] Live Activities
 - [ ] Voice notes
-- [ ] Shared bucket list and to-do list
+- [ ] Shared bucket list
+- [ ] Shared to-do list
 - [ ] Anniversary and date reminders
-- [ ] Additional features based on real usage
+- [ ] Additional features based on actual usage
 
 ## Engineering Principles
 
-### Keep the system proportional
+### Build the product first
 
-Self-hosting is a deliberate engineering goal for this project, but the system should remain proportional. Do not introduce Redis, Kafka, Kubernetes, microservices, or similar systems without a concrete need.
+Mocca is a product project, not an infrastructure project. The goal is to build something useful and enjoyable before optimizing for scale that does not exist yet.
 
-### Enforce authorization on the server
+### Keep the system simple
 
-The mobile client is not a security boundary. Every request for shared data must verify membership on the server.
+Use the simplest solution that works. Do not add Redis, Kafka, Kubernetes, microservices, or similar infrastructure unless there is a real reason to use it.
 
-### Start with the simpler design
+### Learn through the project
 
-Use online CRUD before offline synchronization, polling before real-time updates, and an established authentication library with external identity providers before custom authentication flows. Add complexity when it addresses a measured problem.
+The project is intentionally a learning exercise. New technologies are welcome when they help develop a useful skill or solve a real problem, but learning should not come at the expense of finishing Mocca.
+
+### Keep authorization on the server
+
+The mobile app is not a security boundary. Access to shared data is always checked by the server.
 
 ### Test important behavior
 
-Prioritize tests for authentication, authorization, shared-space isolation, core note behavior, and important mobile flows. Tests are part of feature development, not a separate final phase.
+Tests should focus on behavior that matters: authentication, authorization, shared-space isolation, notes, photos, and important mobile flows.
 
-### Finish the core product first
+### Finish before expanding
 
-The priority is a stable `v1.0` running on both phones. Work planned for `v2.0` and later should not delay that goal.
+The priority is a stable version of the core Mocca experience on both phones. New ideas should not continually push that goal further away.
 
 ## Release Checklist
 
 Before completing a release:
 
 - [ ] Verify the feature on both phones
-- [ ] Confirm server-side authorization coverage
 - [ ] Run relevant automated tests
 - [ ] Run type checking, linting, and formatting checks
 - [ ] Verify production configuration
-- [ ] Confirm error reporting where applicable
-- [ ] Verify database backups
+- [ ] Confirm backups are working
 - [ ] Test the mobile build through TestFlight
-- [ ] Add required changesets and changelogs
+- [ ] Update the changelog when applicable
 - [ ] Create the Git release tag
 
-Production migration, deployment, and backup procedures are in [operations.md](operations.md).
+Deployment and backup procedures are documented in [operations.md](operations.md).
