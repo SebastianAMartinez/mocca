@@ -44,48 +44,14 @@ fi
 restic snapshots >/dev/null
 
 postgres_container=$("${compose[@]}" ps -q postgres)
-seaweed_container=$("${compose[@]}" ps -q seaweedfs)
-if [[ -z "$postgres_container" || -z "$seaweed_container" ]]; then
-	printf 'PostgreSQL and SeaweedFS must both be running before backup.\n' >&2
+
+if [[ -z "$postgres_container" ]]; then
+	printf 'PostgreSQL must be running before backup.\n' >&2
 	exit 1
 fi
-
-seaweed_volume=$(docker inspect --format='{{range .Mounts}}{{if eq .Destination "/data"}}{{.Name}}{{end}}{{end}}' "$seaweed_container")
-if [[ -z "$seaweed_volume" ]]; then
-	printf 'Could not find the SeaweedFS /data Docker volume.\n' >&2
-	exit 1
-fi
-
-docker image inspect busybox:1.37.0 >/dev/null 2>&1 || docker pull busybox:1.37.0 >/dev/null
 
 restic backup \
 	--stdin-from-command \
 	--stdin-filename mocca-postgres.dump \
 	--tag postgres \
 	-- "${compose[@]}" exec -T postgres sh -ec 'exec pg_dump --format=custom --no-owner --no-acl -U "$POSTGRES_USER" "$POSTGRES_DB"'
-
-seaweed_was_stopped=0
-restart_seaweedfs() {
-	local status=$?
-	if [[ $seaweed_was_stopped -eq 1 ]]; then
-		if ! "${compose[@]}" start seaweedfs; then
-			printf 'Failed to restart SeaweedFS after its backup.\n' >&2
-			status=1
-		fi
-	fi
-	exit "$status"
-}
-trap restart_seaweedfs EXIT
-
-"${compose[@]}" stop seaweedfs
-seaweed_was_stopped=1
-
-restic backup \
-	--stdin-from-command \
-	--stdin-filename mocca-seaweedfs.tar \
-	--tag seaweedfs \
-	-- docker run --rm --mount "type=volume,src=$seaweed_volume,dst=/source,readonly" busybox:1.37.0 tar -cf - -C /source .
-
-"${compose[@]}" start seaweedfs
-seaweed_was_stopped=0
-trap - EXIT

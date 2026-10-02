@@ -59,6 +59,9 @@ The next priority is not adding more infrastructure. It is building the first us
 
 - pnpm workspaces
 - Biome
+- Node.js `node:test`
+- Husky and Commitlint
+- semantic-release
 - GitHub Actions
 - Docker Compose
 
@@ -99,20 +102,38 @@ Run repository checks:
 pnpm check
 ```
 
-Start the local services:
+Start local PostgreSQL:
 
 ```bash
-docker compose up -d
+docker volume create mocca-postgres-data
+docker compose up -d --remove-orphans postgres
+docker compose ps
 ```
 
-Start the API and mobile app in separate terminals:
+Copy the tracked environment examples to their ignored `.env` paths, fill in local authentication provider credentials, and keep the files private. `--remove-orphans` stops an old local SeaweedFS container without deleting its volume. The runbook explains the first local database role and migration.
+
+Start the API and Expo app in separate terminals:
 
 ```bash
 pnpm --filter @mocca/server dev
 pnpm --filter @mocca/mobile start
 ```
 
-See [operations.md](operations.md) for deployment, database, and backup procedures.
+The server development command loads `apps/server/.env`; production deployment uses process environment variables instead. See [operations.md](operations.md) for database migration and production procedures.
+
+## Branch Workflow
+
+`main` is the only long-lived branch. Changes are developed on short-lived branches named for their purpose, such as `feat/expo-mobile`, `fix/note-authorization`, or `chore/update-tooling`.
+
+Open a pull request into `main` for each focused change. The branch must be current with `main`, and the repository checks must pass before merging. Pull requests are squash merged, and GitHub deletes merged branches automatically.
+
+Direct pushes, force pushes, and deletion of `main` are blocked. Approvals are not required while this remains a single-developer project.
+
+## Commits and Releases
+
+Commit messages follow the Conventional Commits format and are checked by Commitlint through a Husky `commit-msg` hook. Use Conventional Commit messages for squash-merge pull request titles. After checks and production deployment succeed on `main`, semantic-release creates a `vX.Y.Z` Git tag and GitHub Release with generated notes. `feat` triggers a minor version, `fix` and `perf` trigger a patch, and `BREAKING CHANGE` triggers a major version. Documentation, test, and chore commits do not release by themselves. Private workspace packages are not published to npm.
+
+Mobile app versions and iOS build numbers are separate from package versions. EAS will manage build numbers remotely, while human-facing app versions are changed when preparing a release.
 
 ## Roadmap
 
@@ -243,6 +264,8 @@ The priority is a stable version of the core Mocca experience on both phones. Ne
 
 ## Release Checklist
 
+After checks and deployment succeed on `main`, semantic-release creates the GitHub release and version tag from the Conventional Commit message. Verify the generated release notes; do not create version tags manually.
+
 Before completing a release:
 
 - [ ] Verify the feature on both phones
@@ -252,6 +275,6 @@ Before completing a release:
 - [ ] Confirm backups are working
 - [ ] Test the mobile build through TestFlight
 - [ ] Update the changelog when applicable
-- [ ] Create the Git release tag
+- [ ] Verify the automatically created GitHub release and tag
 
 Deployment and backup procedures are documented in [operations.md](operations.md).

@@ -1,19 +1,18 @@
-name: CI
+name: CI/CD
 
 on:
-  push:
   pull_request:
+  push:
+    branches:
+      - main
 
 permissions:
   contents: read
 
 jobs:
   checks:
-    name: Repository checks
+    name: Checks and build
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-
     steps:
       - name: Check out repository
         uses: actions/checkout@v7.0.1
@@ -30,128 +29,38 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Check formatting, linting, and types
+      - name: Check formatting, linting, types, and tests
         run: pnpm check
 
       - name: Build server
         run: pnpm --filter @mocca/server build
 
+      - name: Validate Compose configuration
+        run: |
+          docker compose --env-file .env.example -f compose.yaml config --quiet
+          docker compose --env-file .env.production.example -f compose.production.yaml config --quiet
+
       - name: Build production API image
-        if: github.event_name == 'pull_request'
         run: docker build --file apps/server/Dockerfile --target runtime --tag mocca-api:ci .
 
-  changesets:
-    name: Create version PR or publish release tags
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.MOCCA_CHANGESETS_APP_ID != ''
+  deploy:
+    name: Deploy production
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     needs: checks
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    outputs:
-      published: ${{ steps.changesets.outputs.published }}
-      packages: ${{ steps.changesets.outputs.published-packages }}
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@v7.0.1
-
-      - name: Set up pnpm
-        uses: pnpm/action-setup@v6.1.0
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v7.0.0
-        with:
-          node-version: 24
-          cache: pnpm
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Create Changesets GitHub App token
-        id: changesets-token
-        uses: actions/create-github-app-token@v3.2.0
-        with:
-          client-id: ${{ vars.MOCCA_CHANGESETS_APP_ID }}
-          private-key: ${{ secrets.MOCCA_CHANGESETS_APP_PRIVATE_KEY }}
-          permission-contents: write
-          permission-pull-requests: write
-
-      - name: Version packages or publish private package tags
-        id: changesets
-        uses: changesets/action@v2.1.2
-        with:
-          github-token: ${{ steps.changesets-token.outputs.token }}
-          publish-script: pnpm release
-          create-github-releases: true
-
-  publish-api:
-    name: Publish production API image
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.changesets.outputs.published == 'true' && contains(needs.changesets.outputs.packages, '@mocca/server')
-    needs:
-      - checks
-      - changesets
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@v7.0.1
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4.4.1
-
-      - name: Log in to GitHub Container Registry
-        uses: docker/login-action@v4.6.0
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Read released API version
-        id: api-version
-        run: |
-          set -Eeuo pipefail
-          api_version=$(node -e 'console.log(JSON.parse(require("node:fs").readFileSync("apps/server/package.json", "utf8")).version)')
-          [[ "$api_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$ ]]
-          printf 'version=%s\n' "$api_version" >> "$GITHUB_OUTPUT"
-
-      - name: Build and publish API image
-        uses: docker/build-push-action@v7.4.0
-        with:
-          context: .
-          file: apps/server/Dockerfile
-          target: runtime
-          push: true
-          tags: |
-            ghcr.io/sebastianamartinez/mocca-api:sha-${{ github.sha }}
-            ghcr.io/sebastianamartinez/mocca-api:v${{ steps.api-version.outputs.version }}
-          labels: org.opencontainers.image.source=https://github.com/${{ github.repository }}
-
-  deploy-production-api:
-    name: Deploy production API
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.MOCCA_PRODUCTION_DEPLOY_ENABLED == 'true' && needs.changesets.outputs.published == 'true' && contains(needs.changesets.outputs.packages, '@mocca/server')
-    needs:
-      - checks
-      - changesets
-      - publish-api
-    runs-on: ubuntu-latest
     environment: production
-    permissions:
-      contents: read
-    concurrency:
-      group: production-api-deploy
-      cancel-in-progress: false
     steps:
-      - name: Prepare restricted SSH credentials
+      - name: Prepare SSH credentials
         env:
-          DEPLOY_HOST: ${{ vars.MOCCA_PRODUCTION_DEPLOY_HOST }}
-          DEPLOY_KNOWN_HOSTS: ${{ vars.MOCCA_PRODUCTION_KNOWN_HOSTS }}
-          DEPLOY_PRIVATE_KEY: ${{ secrets.MOCCA_PRODUCTION_SSH_PRIVATE_KEY }}
+          DEPLOY_HOST: ${{ vars.PRODUCTION_HOST }}
+          DEPLOY_USER: ${{ vars.PRODUCTION_USER }}
+          DEPLOY_KNOWN_HOSTS: ${{ vars.PRODUCTION_KNOWN_HOSTS }}
+          DEPLOY_PRIVATE_KEY: ${{ secrets.PRODUCTION_SSH_PRIVATE_KEY }}
         run: |
           set -Eeuo pipefail
 
           [[ "$DEPLOY_HOST" =~ ^[A-Za-z0-9.-]+$ ]] || { echo "Invalid or missing production host" >&2; exit 1; }
-          [[ "$GITHUB_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo "Invalid commit SHA" >&2; exit 1; }
+          [[ "$DEPLOY_USER" =~ ^[a-z_][a-z0-9_-]*$ ]] || { echo "Invalid or missing production user" >&2; exit 1; }
           [[ -n "$DEPLOY_PRIVATE_KEY" ]] || { echo "Missing production SSH private key secret" >&2; exit 1; }
           [[ -n "$DEPLOY_KNOWN_HOSTS" ]] || { echo "Missing pinned SSH known_hosts variable" >&2; exit 1; }
 
@@ -165,9 +74,11 @@ jobs:
             echo "Pinned host key does not contain the configured production host" >&2
             exit 1
           }
-      - name: Deploy published API image
+
+      - name: Pull, build, and start production stack
         env:
-          DEPLOY_HOST: ${{ vars.MOCCA_PRODUCTION_DEPLOY_HOST }}
+          DEPLOY_HOST: ${{ vars.PRODUCTION_HOST }}
+          DEPLOY_USER: ${{ vars.PRODUCTION_USER }}
         run: |
           set -Eeuo pipefail
           ssh \
@@ -178,5 +89,60 @@ jobs:
             -o StrictHostKeyChecking=yes \
             -o UserKnownHostsFile="$RUNNER_TEMP/mocca-ssh/known_hosts" \
             -o GlobalKnownHostsFile=/dev/null \
-            "mocca-deploy@$DEPLOY_HOST" \
-            "deploy $GITHUB_SHA"
+            "$DEPLOY_USER@$DEPLOY_HOST" \
+            'bash -s' <<'REMOTE'
+          set -Eeuo pipefail
+          cd /home/sebastian/mocca
+          git pull --ff-only origin main
+
+          compose=(docker compose --env-file .env.production -f compose.production.yaml)
+          "${compose[@]}" build api
+          "${compose[@]}" run --rm --no-deps --entrypoint sh api -ec '
+            node dist/server.js &
+            api_pid=$!
+            trap "kill \"$api_pid\" 2>/dev/null || true" EXIT
+            for attempt in $(seq 1 30); do
+              if ! kill -0 "$api_pid" 2>/dev/null; then
+                exit 1
+              fi
+              if node -e "fetch(\"http://127.0.0.1:3000/health\").then((response) => process.exit(response.ok ? 0 : 1)).catch(() => process.exit(1))"; then
+                exit 0
+              fi
+              sleep 1
+            done
+            exit 1
+          '
+          "${compose[@]}" up --detach --remove-orphans --wait --wait-timeout 180
+          REMOTE
+
+  release:
+    name: Create GitHub release
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs:
+      - checks
+      - deploy
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Check out full history
+        uses: actions/checkout@v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v6.1.0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7.0.0
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Analyze commits and publish release
+        run: pnpm exec semantic-release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

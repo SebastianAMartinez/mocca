@@ -4,15 +4,12 @@
 	"private": true,
 	"scripts": {
 		"check": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test",
-		"changeset": "changeset",
 		"format": "biome format --write .",
 		"format:check": "biome format .",
 		"lint": "biome lint .",
 		"prepare": "husky",
-		"release": "changeset publish",
 		"typecheck": "pnpm --recursive --if-present run typecheck",
-		"test": "pnpm --recursive --if-present run test",
-		"version-packages": "changeset version"
+		"test": "pnpm --recursive --if-present run test"
 	},
 	"devEngines": {
 		"packageManager": {
@@ -25,10 +22,10 @@
 	"type": "module",
 	"devDependencies": {
 		"@biomejs/biome": "^2.5.14",
-		"@changesets/cli": "^3.0.3",
 		"@commitlint/cli": "^21.2.3",
 		"@commitlint/config-conventional": "^21.2.3",
 		"husky": "^9.1.7",
+		"semantic-release": "^25.0.9",
 		"typescript": "^7.0.2"
 	}
 }

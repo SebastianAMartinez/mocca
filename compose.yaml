@@ -20,22 +20,7 @@ services:
       retries: 5
       start_period: 10s
 
-  seaweedfs:
-    image: chrislusf/seaweedfs:4.47
-    restart: unless-stopped
-    command: ["mini", "-dir=/data"]
-    environment:
-      AWS_ACCESS_KEY_ID: ${SEAWEEDFS_ACCESS_KEY_ID:?Set SEAWEEDFS_ACCESS_KEY_ID in the root .env file}
-      AWS_SECRET_ACCESS_KEY: ${SEAWEEDFS_SECRET_ACCESS_KEY:?Set SEAWEEDFS_SECRET_ACCESS_KEY in the root .env file}
-      S3_BUCKET: mocca-photos
-    ports:
-      - "127.0.0.1:8333:8333"
-    volumes:
-      - seaweedfs-data:/data
-
 volumes:
   postgres-data:
     external: true
     name: mocca-postgres-data
-  seaweedfs-data:
-    name: mocca-seaweedfs-data
