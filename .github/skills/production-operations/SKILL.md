@@ -1,6 +1,6 @@
 ---
 name: production-operations
-description: "Use when: releasing, deploying, migrating, backing up, restoring, or troubleshooting Mocca production infrastructure, Docker Compose, GHCR, Changesets, the Droplet, PostgreSQL, SeaweedFS, Caddy, Restic, or Backblaze B2."
+description: "Use when: deploying, migrating, backing up, restoring, or troubleshooting Mocca production infrastructure, GitHub Actions, Docker Compose, the DigitalOcean Droplet, PostgreSQL, Caddy, Restic, or Backblaze B2."
 ---
 
 # Production Operations
@@ -21,8 +21,8 @@ Use this skill only for production and release operations. Treat `operations.md`
 - Never run `docker compose down --volumes` against production.
 - Never discard server-side or local changes to make a pull succeed; stop if the checkout is dirty or cannot fast-forward.
 - Keep migrations separate from API deployment. Require a verified backup before a production migration.
-- Deploy only immutable API images that passed CI. Keep automatic production deployment disabled until the first versioned release and manual deployment are verified.
-- Use the restricted deployment identity; do not grant general root SSH or Docker socket access to GitHub Actions.
+- The `main` GitHub Actions workflow deploys only after checks pass. Never initiate a production deployment manually unless explicitly requested.
+- Use a dedicated SSH identity, verify and pin the server host key, and protect production environment secrets. Docker access is root-equivalent; grant it only to the dedicated deployment user.
 - Treat database restore as a last resort requiring explicit user approval because it can discard newer writes.
 
 Do not copy operational commands into this skill. Update `operations.md` when procedures change so there is one maintained runbook.

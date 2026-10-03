@@ -59,6 +59,8 @@ The next priority is not adding more infrastructure. It is building the first us
 
 - pnpm workspaces
 - Biome
+- Node.js `node:test`
+- Husky and Commitlint
 - GitHub Actions
 - Docker Compose
 
@@ -99,20 +101,45 @@ Run repository checks:
 pnpm check
 ```
 
-Start the local services:
+Start local PostgreSQL:
 
 ```bash
-docker compose up -d
+docker volume create mocca-postgres-data
+docker compose up -d --remove-orphans postgres
+docker compose ps
 ```
 
-Start the API and mobile app in separate terminals:
+Copy the tracked environment examples to their ignored `.env` paths, fill in local authentication provider credentials, and keep the files private. `--remove-orphans` stops obsolete containers without deleting their volumes. The runbook explains the first local database role and migration.
+
+Start the API and Expo app in separate terminals:
 
 ```bash
 pnpm --filter @mocca/server dev
 pnpm --filter @mocca/mobile start
 ```
 
-See [operations.md](operations.md) for deployment, database, and backup procedures.
+The server development command loads `apps/server/.env`; production deployment uses process environment variables instead. See [operations.md](operations.md) for database migration and production procedures.
+
+## Branch Workflow
+
+`main` is the only long-lived branch. Changes are developed on short-lived branches named for their purpose, such as `feat/expo-mobile`, `fix/note-authorization`, or `chore/update-tooling`.
+
+Open a pull request into `main` for each focused change. The branch must be current with `main`, and the repository checks must pass before merging. Pull requests are squash merged, and GitHub deletes merged branches automatically.
+
+Direct pushes, force pushes, and deletion of `main` are blocked. Approvals are not required while this remains a single-developer project.
+
+## Commits and Releases
+
+Commit messages follow the Conventional Commits format and are checked by Commitlint through a Husky `commit-msg` hook. Use Conventional Commit messages for squash-merge pull request titles. Releases are manual: after preparing a release, create and push a version tag, for example:
+
+```bash
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+Mocca does not publish npm packages or create GitHub releases automatically.
+
+Mobile app versions and iOS build numbers are separate from package versions. EAS will manage build numbers remotely, while human-facing app versions are changed when preparing a release.
 
 ## Roadmap
 
@@ -243,6 +270,8 @@ The priority is a stable version of the core Mocca experience on both phones. Ne
 
 ## Release Checklist
 
+Create and push a version tag manually, following the process above.
+
 Before completing a release:
 
 - [ ] Verify the feature on both phones
@@ -252,6 +281,6 @@ Before completing a release:
 - [ ] Confirm backups are working
 - [ ] Test the mobile build through TestFlight
 - [ ] Update the changelog when applicable
-- [ ] Create the Git release tag
+- [ ] Verify the version tag
 
 Deployment and backup procedures are documented in [operations.md](operations.md).

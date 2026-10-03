@@ -29,23 +29,19 @@ done
 
 run_id="$(date -u +%Y%m%d%H%M%S)-$$"
 postgres_volume="mocca-restore-check-postgres-$run_id"
-seaweed_volume="mocca-restore-check-seaweed-$run_id"
 postgres_container="mocca-restore-check-postgres-$run_id"
-seaweed_container="mocca-restore-check-seaweed-$run_id"
 
 cleanup() {
 	local status=$?
-	docker rm -f "$postgres_container" "$seaweed_container" >/dev/null 2>&1 || true
-	docker volume rm "$postgres_volume" "$seaweed_volume" >/dev/null 2>&1 || true
+	docker rm -f "$postgres_container" >/dev/null 2>&1 || true
+	docker volume rm "$postgres_volume" >/dev/null 2>&1 || true
 	exit "$status"
 }
 trap cleanup EXIT
 
 postgres_snapshot=$(restic snapshots --json --tag postgres | jq -er 'sort_by(.time) | last | .id')
-seaweed_snapshot=$(restic snapshots --json --tag seaweedfs | jq -er 'sort_by(.time) | last | .id')
 
 docker volume create "$postgres_volume" >/dev/null
-docker volume create "$seaweed_volume" >/dev/null
 
 docker run --detach \
 	--name "$postgres_container" \
@@ -85,29 +81,3 @@ if [[ ! "$table_count" =~ ^[0-9]+$ || $table_count -eq 0 ]]; then
 	exit 1
 fi
 printf 'PostgreSQL restore passed (%s public tables).\n' "$table_count"
-
-restic dump "$seaweed_snapshot" mocca-seaweedfs.tar |
-	docker run --rm -i \
-		--mount "type=volume,src=$seaweed_volume,dst=/restore" \
-		busybox:1.37.0 tar -xf - -C /restore
-
-docker run --detach \
-	--name "$seaweed_container" \
-	--network none \
-	--mount "type=volume,src=$seaweed_volume,dst=/data" \
-	chrislusf/seaweedfs:4.47 mini -dir=/data >/dev/null
-
-seaweed_running=1
-for attempt in {1..30}; do
-	if [[ "$(docker inspect --format='{{.State.Running}}' "$seaweed_container")" != true ]]; then
-		seaweed_running=0
-		break
-	fi
-	sleep 1
-done
-if [[ $seaweed_running -ne 1 ]]; then
-	docker logs "$seaweed_container" >&2
-	printf 'Restored SeaweedFS container exited during startup.\n' >&2
-	exit 1
-fi
-printf 'SeaweedFS restore passed (isolated container stayed running for 30 seconds).\n'

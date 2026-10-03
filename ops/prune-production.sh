@@ -20,13 +20,11 @@ if [[ $EUID -ne 0 ]]; then
 	exit 1
 fi
 
-for tag in postgres seaweedfs; do
-	restic forget \
-		--tag "$tag" \
-		--keep-daily 7 \
-		--keep-weekly 4 \
-		--keep-monthly 12
-done
+restic forget \
+	--tag postgres \
+	--keep-daily 7 \
+	--keep-weekly 4 \
+	--keep-monthly 12
 
 restic prune
 restic check --read-data-subset=10%
