@@ -22,7 +22,7 @@ The intended request path is Expo -> tRPC -> Fastify -> Drizzle -> PostgreSQL. B
 
 Never hard-code or print API keys, passwords, database credentials, authentication secrets, private keys, or tokens. Keep secrets in ignored environment files or provider secret stores. Do not read or display environment-file contents wholesale.
 
-For production deployment, migrations, backups, or restores, follow `operations.md` and load the `production-operations` skill. Never run a production deployment or destructive production command unless the user explicitly requests it; the configured GitHub Actions workflow deploys after successful checks on `main`.
+For production deployment, migrations, backups, or restores, follow `operations.md` and load the `production-operations` skill. Deployment is manual after successful CI checks on `main`; GitHub Actions does not connect to the Droplet. Never run a production deployment or destructive production command unless the user explicitly requests it.
 
 ## Engineering Rules
 
@@ -46,6 +46,6 @@ Ask before making a decision that materially changes architecture, data design, 
 
 ## Current Direction
 
-The foundation is in place: Expo, Fastify/tRPC, PostgreSQL/Drizzle, Better Auth, CI, production hosting, automatic main-branch deployment, and tested PostgreSQL backups. Keep operational work proportional to the product and maintain procedures in `operations.md`.
+The foundation is in place: Expo, Fastify/tRPC, PostgreSQL/Drizzle, Better Auth, CI, production hosting, manual deployment, and tested PostgreSQL backups. Keep operational work proportional to the product and maintain procedures in `operations.md`.
 
 Continue with the smallest useful Mocca experience: shared domain contracts, server-enforced membership, notes, photos, and tests in roadmap order. Keep infrastructure maintenance proportional and secondary to the product.

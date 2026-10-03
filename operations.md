@@ -11,12 +11,21 @@ Internet -> Caddy (ports 80/443, HTTPS) -> Mocca API -> PostgreSQL
 
 Caddy terminates TLS for `mocca-api.sebastianamartinez.com`. The API and PostgreSQL run in Docker Compose. PostgreSQL has a persistent Docker volume, is not published to the host, and is reachable only on the internal `backend` network. Daily PostgreSQL dumps are encrypted by Restic and stored in Backblaze B2.
 
-The old `mocca-seaweedfs-data` Docker volume is intentionally not part of the Compose stack. The first deployment with `--remove-orphans` stops the old SeaweedFS container but does not delete that volume. Leave it for manual review or migration; do not remove it until its contents are confirmed disposable. If an older ignored `.env` or `.env.production` still has `SEAWEEDFS_ACCESS_KEY_ID` or `SEAWEEDFS_SECRET_ACCESS_KEY`, remove those unused entries without printing or committing the file.
+The old `mocca-seaweedfs-data` Docker volume is intentionally not part of the Compose stack. The v0.1.0 deployment removed the old SeaweedFS container with `--remove-orphans` without deleting its volume. Leave the volume for manual review or migration; do not remove it until its contents are confirmed disposable. If an older ignored `.env` or `.env.production` still has `SEAWEEDFS_ACCESS_KEY_ID` or `SEAWEEDFS_SECRET_ACCESS_KEY`, remove those unused entries without printing or committing the file.
+
+### v0.1.0 deployment record
+
+- Published tag and deployed checkout: `v0.1.0`, commit `a6ef5e84bec6afd66395f3f5c576342a45cf3894`.
+- CI checks and production image build passed. The automatic deployment failed with an SSH connection timeout before executing remote commands. Deployment was completed manually; automatic SSH deployment was subsequently removed to keep operations simple.
+- The clean Droplet checkout was fast-forwarded to the release commit, and the API image was built locally.
+- The temporary API container passed its `/health` smoke test against the running PostgreSQL database. The production stack then started successfully, with API and PostgreSQL healthy.
+- The running API image ID matched the locally built image ID, and the public HTTPS `/health` endpoint returned `{"status":"ok"}`.
+- No database migrations were run, and no data volumes were deleted.
 
 ## Normal workflow
 
 1. Open a pull request into `main`. CI installs dependencies, checks formatting, linting, types and tests, builds the server, validates both Compose files, and builds the production API image.
-2. After checks pass and the PR is merged, the push to `main` deploys automatically. GitHub Actions SSHes to the Droplet, fast-forwards its checkout, builds and smoke-tests the API image, then starts the stack and waits for service health.
+2. After the PR is merged and CI passes on `main`, deploy manually when needed using the procedure below. Merging a PR or pushing a version tag does not deploy production.
 3. Migrations are a separate reviewed operation; deployment does not run them.
 4. Check production with the commands below. Deployment has no automatic rollback.
 
@@ -29,22 +38,66 @@ git push origin v0.1.0
 
 ## Server setup and secrets
 
-The Droplet needs Git, Docker with the Compose plugin, and a clean repository checkout at `/home/sebastian/mocca` on `main`. It also needs the private `.env.production`, a read-only GitHub deploy key for fetching the private repository, and a dedicated deployment SSH user with access to the checkout and Docker. Docker access is effectively root access.
+The Droplet needs Git, Docker with the Compose plugin, and a clean repository checkout at `/home/sebastian/mocca` on `main`. It also needs the private `.env.production`, read-only GitHub repository access for fetching the private repository, and an authorized operator account with SSH access and permission to run Docker (through `sudo` if required). Docker access is effectively root access.
 
-Configure the GitHub `production` environment:
+GitHub Actions requires no production SSH credentials. After the CI-only workflow is merged, the unused `PRODUCTION_HOST`, `PRODUCTION_USER`, and `PRODUCTION_KNOWN_HOSTS` variables and `PRODUCTION_SSH_PRIVATE_KEY` secret can be removed from the GitHub `production` environment. Revoke the old Actions key on the Droplet only after confirming it is not used for operator access; do not remove the repository credential or your working login key.
 
-| Name | Type | Purpose |
-| --- | --- | --- |
-| `PRODUCTION_HOST` | Variable | Droplet hostname or IP, without a port |
-| `PRODUCTION_USER` | Variable | Dedicated SSH deployment user |
-| `PRODUCTION_KNOWN_HOSTS` | Variable | Pinned host key verified against the Droplet |
-| `PRODUCTION_SSH_PRIVATE_KEY` | Secret | Dedicated Actions SSH private key |
-
-Verify the Droplet host fingerprint out of band. The Actions key must be installed for the deployment user, with no forced command. Keep it separate from the repository's read-only deploy key. Store production authentication, database and Caddy values in the private `.env.production`; use [.env.production.example](./.env.production.example) as the variable reference. Never commit or print secret files. The production API domain is configured by `API_DOMAIN` and `BETTER_AUTH_URL`; keep both on `mocca-api.sebastianamartinez.com` along with the mobile production URL and provider callback settings.
+Verify the Droplet host fingerprint out of band when connecting over SSH. Store production authentication, database and Caddy values in the private `.env.production`; use [.env.production.example](./.env.production.example) as the variable reference. Never commit or print secret files. The production API domain is configured by `API_DOMAIN` and `BETTER_AUTH_URL`; keep both on `mocca-api.sebastianamartinez.com` along with the mobile production URL and provider callback settings.
 
 ## Deploy and inspect
 
-CI deploys only after checks pass on `main`. On the server, a manual deployment (only when needed) follows the same sequence: verify the checkout is clean, pull with `git pull --ff-only origin main`, build `api`, run the image's `/health` smoke test against PostgreSQL, then run Compose with `up --detach --remove-orphans --wait --wait-timeout 180`. Do not deploy over local server changes. A failed deploy does not restore the previous image automatically; see Recovery.
+Deploy only after CI passes for the target commit on `main`. Connect using your authorized SSH account or the DigitalOcean console. Run the following steps in the same Bash shell on the Droplet. Stop on any failure; do not deploy over local server changes or a different branch. A failed deploy does not restore the previous image automatically; see Recovery.
+
+First inspect the checkout, then fast-forward it only if it is clean and on `main`:
+
+```bash
+cd /home/sebastian/mocca
+git status --short --branch
+git branch --show-current
+git pull --ff-only origin main
+git log -1 --oneline
+```
+
+Confirm the resulting commit is the one whose CI passed. For a versioned release, fetch tags with `git fetch origin --tags` and compare `git rev-parse HEAD` with `git rev-parse <release-tag>` before building.
+
+Inspect the existing services, then build and smoke-test the new image against the running PostgreSQL database without replacing the live API. If your account requires `sudo` for Docker, use the array below; otherwise omit `sudo`.
+
+```bash
+compose=(sudo docker compose --env-file .env.production -f compose.production.yaml)
+"${compose[@]}" ps
+"${compose[@]}" build api
+"${compose[@]}" run --rm --no-deps --entrypoint sh api -ec '
+  node dist/server.js &
+  api_pid=$!
+  trap "kill \"$api_pid\" 2>/dev/null || true" EXIT
+  for attempt in $(seq 1 30); do
+    if ! kill -0 "$api_pid" 2>/dev/null; then
+      echo "Smoke test failed: API process exited" >&2
+      exit 1
+    fi
+    if node -e "fetch(\"http://127.0.0.1:3000/health\").then((response) => process.exit(response.ok ? 0 : 1)).catch(() => process.exit(1))"; then
+      echo "Smoke test passed"
+      exit 0
+    fi
+    sleep 1
+  done
+  echo "Smoke test failed: health endpoint did not become ready" >&2
+  exit 1
+'
+```
+
+Only after the smoke test passes, replace the live services and verify production. This can briefly interrupt API access. `--remove-orphans` removes obsolete containers, not their data volumes. Do not run database migrations as part of deployment.
+
+```bash
+"${compose[@]}" up --detach --remove-orphans --wait --wait-timeout 180
+curl --fail --silent --show-error --connect-timeout 10 --max-time 20 \
+  https://mocca-api.sebastianamartinez.com/health
+"${compose[@]}" ps
+sudo docker inspect --format '{{.Image}}' mocca-production-api-1
+sudo docker image inspect --format '{{.Id}}' mocca-production-api:latest
+```
+
+The health endpoint must return `{"status":"ok"}`, the API and PostgreSQL must be healthy, and the running API image ID must match the built image ID.
 
 Run on the Droplet from `/home/sebastian/mocca`:
 
@@ -101,10 +154,10 @@ sudo bash ops/restore-check-production.sh
 
 ## Recovery and rebuild
 
-- **Deployment failed:** inspect the GitHub Actions run and API/Caddy logs. Revert through a pull request, or manually deploy a known-good commit only after verifying the server checkout is clean and the database schema is compatible.
+- **Deployment failed:** inspect the failed command and API/Caddy logs; if CI failed, inspect the GitHub Actions run before attempting deployment. Revert through a pull request, or manually deploy a known-good commit only after verifying the server checkout is clean and the database schema is compatible.
 - **API unavailable:** check Compose status and API, Caddy and PostgreSQL logs. Confirm PostgreSQL is healthy, then restart the API with `"${compose[@]}" restart api` and check the public health endpoint.
 - **PostgreSQL unavailable:** inspect PostgreSQL logs and the persistent volume. Do not remove or recreate the volume. Restore from B2 only after selecting a snapshot and accounting for writes that will be lost.
-- **Server rebuild:** install Docker/Compose, Git, Restic and `jq`; restore the private checkout, `.env.production` and `/etc/mocca-backup.env` from secure copies; reinstall the read-only GitHub deploy key and pinned Actions SSH access; then start the stack, run migrations if needed, configure and verify backups, and check the public health endpoint. Keep the Droplet IP/DNS and Caddy certificate data where possible.
+- **Server rebuild:** install Docker/Compose, Git, Restic and `jq`; restore the private checkout, `.env.production` and `/etc/mocca-backup.env` from secure copies; restore read-only GitHub repository access and authorized operator SSH access; then start the stack, run migrations if needed, configure and verify backups, and check the public health endpoint. Keep the Droplet IP/DNS and Caddy certificate data where possible.
 
 ### Restore PostgreSQL
 

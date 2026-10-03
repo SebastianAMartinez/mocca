@@ -21,11 +21,13 @@ The initial version is intentionally small. The focus is on making the core expe
 
 ## Current Status
 
-The project is currently in the foundation stage.
+The v0.1 foundation milestone is complete. The `v0.1.0` tag is published, and its API image has been built and deployed on the production Droplet with smoke-test and public HTTPS health verification.
 
 The monorepo, Expo mobile app, Fastify API, PostgreSQL database, authentication, local development environment, CI, and production deployment foundation are in place. Authentication can be used from the mobile app, but the actual Mocca experience is still being built.
 
 The next priority is not adding more infrastructure. It is building the first useful version of Mocca.
+
+Production deployment is manual; GitHub Actions validates changes but does not connect to the Droplet. See [operations.md](operations.md) for the deployment procedure.
 
 ## Technology
 
@@ -158,7 +160,7 @@ Set up everything needed to start building Mocca.
 - [x] Set up local development
 - [x] Set up CI and production deployment
 - [x] Set up backups and restore procedures
-- [ ] Complete the first versioned release
+- [x] Complete the first versioned release (`v0.1.0`)
 
 ### v0.2: MVP
 

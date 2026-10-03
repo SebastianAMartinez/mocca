@@ -21,8 +21,8 @@ Use this skill only for production and release operations. Treat `operations.md`
 - Never run `docker compose down --volumes` against production.
 - Never discard server-side or local changes to make a pull succeed; stop if the checkout is dirty or cannot fast-forward.
 - Keep migrations separate from API deployment. Require a verified backup before a production migration.
-- The `main` GitHub Actions workflow deploys only after checks pass. Never initiate a production deployment manually unless explicitly requested.
-- Use a dedicated SSH identity, verify and pin the server host key, and protect production environment secrets. Docker access is root-equivalent; grant it only to the dedicated deployment user.
+- Deployment is manual after CI checks pass on `main`; GitHub Actions does not connect to the Droplet. Never initiate a production deployment unless explicitly requested.
+- Use an authorized SSH identity, verify the server host key, and protect production environment secrets. Docker access is root-equivalent; grant it only to trusted operators.
 - Treat database restore as a last resort requiring explicit user approval because it can discard newer writes.
 
 Do not copy operational commands into this skill. Update `operations.md` when procedures change so there is one maintained runbook.
