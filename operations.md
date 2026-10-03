@@ -1,109 +1,80 @@
 # Operations
 
-Production is one DigitalOcean server running Caddy, the Mocca API, and PostgreSQL with Docker Compose. Cloudflare provides DNS; Caddy terminates HTTPS. PostgreSQL is not published to the internet. Daily encrypted database backups go to Backblaze B2 through Restic. Keep production credentials in private files or a password manager, never in Git.
+## Production at a glance
 
-The current API hostname is `mocca-api.sebastianamartinez.com`; its DNS, Better Auth provider settings, and mobile production build must move together if the hostname changes.
+Mocca runs on one DigitalOcean Droplet:
 
-## Local Development
-
-Requirements: Node.js 24, pnpm 12.5.1, and Docker Compose.
-
-```bash
-pnpm install
-cp .env.example .env
-cp apps/server/.env.example apps/server/.env
-cp packages/db/.env.example packages/db/.env
-cp apps/mobile/.env.example apps/mobile/.env.local
-docker volume create mocca-postgres-data
-docker compose up -d --remove-orphans postgres
-docker compose ps
+```text
+Internet -> Caddy (ports 80/443, HTTPS) -> Mocca API -> PostgreSQL
+                 edge network          backend network
 ```
 
-Use the same local PostgreSQL password in the root, server, and database environment files. Add development Google/Apple credentials to `apps/server/.env` before testing sign-in. The first local migration also needs the `mocca_app` role: connect with `docker compose exec postgres psql -U postgres -d mocca`, run `CREATE ROLE mocca_app LOGIN;`, then `\password mocca_app` at the prompt.
+Caddy terminates TLS for `mocca-api.sebastianamartinez.com`. The API and PostgreSQL run in Docker Compose. PostgreSQL has a persistent Docker volume, is not published to the host, and is reachable only on the internal `backend` network. Daily PostgreSQL dumps are encrypted by Restic and stored in Backblaze B2.
 
-If an older ignored `.env` still has `SEAWEEDFS_ACCESS_KEY_ID` or `SEAWEEDFS_SECRET_ACCESS_KEY`, remove those unused entries; do not commit or print the file.
+The old `mocca-seaweedfs-data` Docker volume is intentionally not part of the Compose stack. The first deployment with `--remove-orphans` stops the old SeaweedFS container but does not delete that volume. Leave it for manual review or migration; do not remove it until its contents are confirmed disposable. If an older ignored `.env` or `.env.production` still has `SEAWEEDFS_ACCESS_KEY_ID` or `SEAWEEDFS_SECRET_ACCESS_KEY`, remove those unused entries without printing or committing the file.
 
-The local SeaweedFS container has been removed; its `mocca-seaweedfs-data` volume remains for review. On other existing checkouts, `--remove-orphans` stops the old container but leaves its volume untouched. Delete a SeaweedFS volume only after confirming its contents are not needed.
+## Normal workflow
 
-Run the API and mobile app in separate terminals. Generate and review migrations before applying them.
+1. Open a pull request into `main`. CI installs dependencies, checks formatting, linting, types and tests, builds the server, validates both Compose files, and builds the production API image.
+2. After checks pass and the PR is merged, the push to `main` deploys automatically. GitHub Actions SSHes to the Droplet, fast-forwards its checkout, builds and smoke-tests the API image, then starts the stack and waits for service health.
+3. Migrations are a separate reviewed operation; deployment does not run them.
+4. Check production with the commands below. Deployment has no automatic rollback.
+
+For releases, keep Conventional Commit messages (checked locally by Husky and Commitlint) and create version tags manually. For example:
 
 ```bash
-pnpm --filter @mocca/server dev
-pnpm --filter @mocca/mobile start
-pnpm --filter @mocca/db db:generate
-pnpm --filter @mocca/db db:migrate
-pnpm check
+git tag v0.1.0
+git push origin v0.1.0
 ```
 
-## Deployment
+## Server setup and secrets
 
-Pull requests run `pnpm check`, the server build, both Compose configuration checks, and a production API Docker build. After checks pass, a push to `main` deploys automatically. GitHub Actions connects over SSH, runs `git pull --ff-only origin main`, builds the API on the server, and smoke-tests the new image against PostgreSQL before replacing the running API. It then runs `docker compose up --detach --remove-orphans --wait`. This removes the old SeaweedFS container but does not delete its volume. After the first successful deployment, remove the unused SeaweedFS access-key entries from the private `.env.production`; keep the volume until its contents are confirmed disposable. Database migrations remain a separate reviewed operation; deployment never runs them.
+The Droplet needs Git, Docker with the Compose plugin, and a clean repository checkout at `/home/sebastian/mocca` on `main`. It also needs the private `.env.production`, a read-only GitHub deploy key for fetching the private repository, and a dedicated deployment SSH user with access to the checkout and Docker. Docker access is effectively root access.
 
-After deployment succeeds, semantic-release analyzes Conventional Commit messages on `main` and creates a `vX.Y.Z` Git tag and GitHub Release. The release job uses the workflow's `GITHUB_TOKEN` with `contents: write`; no GitHub App or extra release secret is needed. Squash-merge PR titles should use Conventional Commit format. No npm packages are published. With no prior tags, the first release analyzes the repository's existing history; a dry-run against the current `main` history predicts `v1.0.0`.
-
-Configure a GitHub `production` environment with these variables and secret:
+Configure the GitHub `production` environment:
 
 | Name | Type | Purpose |
 | --- | --- | --- |
 | `PRODUCTION_HOST` | Variable | Droplet hostname or IP, without a port |
-| `PRODUCTION_USER` | Variable | SSH deployment user |
-| `PRODUCTION_KNOWN_HOSTS` | Variable | Host key verified against the Droplet |
+| `PRODUCTION_USER` | Variable | Dedicated SSH deployment user |
+| `PRODUCTION_KNOWN_HOSTS` | Variable | Pinned host key verified against the Droplet |
 | `PRODUCTION_SSH_PRIVATE_KEY` | Secret | Dedicated Actions SSH private key |
 
-The server needs Docker Compose, Git, a clean `main` checkout at `/home/sebastian/mocca`, the private `.env.production`, and a read-only GitHub deploy key so that checkout can pull this private repository. The Actions key must be installed for the deployment user without a forced command; keep the SSH `restrict` key option, verify the host fingerprint out of band, and grant the user access to the checkout and Docker. Docker group access is effectively root access on the server. Do not share this key with other workflows or users.
+Verify the Droplet host fingerprint out of band. The Actions key must be installed for the deployment user, with no forced command. Keep it separate from the repository's read-only deploy key. Store production authentication, database and Caddy values in the private `.env.production`; use [.env.production.example](./.env.production.example) as the variable reference. Never commit or print secret files. The production API domain is configured by `API_DOMAIN` and `BETTER_AUTH_URL`; keep both on `mocca-api.sebastianamartinez.com` along with the mobile production URL and provider callback settings.
 
-Create an unencrypted Ed25519 key specifically for Actions, install its public half for the deployment user, and store its private half as the environment secret. Set the three environment variables in the repository settings. Do not enable required human approval on the production environment if merges are expected to deploy unattended.
+## Deploy and inspect
 
-For a manual deployment, connect as the configured user and run:
+CI deploys only after checks pass on `main`. On the server, a manual deployment (only when needed) follows the same sequence: verify the checkout is clean, pull with `git pull --ff-only origin main`, build `api`, run the image's `/health` smoke test against PostgreSQL, then run Compose with `up --detach --remove-orphans --wait --wait-timeout 180`. Do not deploy over local server changes. A failed deploy does not restore the previous image automatically; see Recovery.
+
+Run on the Droplet from `/home/sebastian/mocca`:
 
 ```bash
-cd /home/sebastian/mocca
-git pull --ff-only origin main
 compose=(docker compose --env-file .env.production -f compose.production.yaml)
-"${compose[@]}" build api
-"${compose[@]}" run --rm --no-deps --entrypoint sh api -ec '
-	node dist/server.js &
-	api_pid=$!
-	trap "kill \"$api_pid\" 2>/dev/null || true" EXIT
-	for attempt in $(seq 1 30); do
-		if ! kill -0 "$api_pid" 2>/dev/null; then exit 1; fi
-		if node -e "fetch(\"http://127.0.0.1:3000/health\").then((response) => process.exit(response.ok ? 0 : 1)).catch(() => process.exit(1))"; then exit 0; fi
-		sleep 1
-	done
-	exit 1
-'
-"${compose[@]}" up --detach --remove-orphans --wait --wait-timeout 180
+"${compose[@]}" ps
+"${compose[@]}" logs --tail 100 api
+"${compose[@]}" logs --tail 100 caddy
+"${compose[@]}" logs --tail 100 postgres
 curl -fsS https://mocca-api.sebastianamartinez.com/health
 ```
 
-Compose waits for PostgreSQL and the API health check. It does not retain or automatically restore the previous API image if the new one fails. Check logs and use the recovery steps below; do not run `docker compose down --volumes` in production.
+Only Caddy publishes ports 80 and 443. Caddy reaches the API on `edge`; PostgreSQL is isolated on `backend`, shared with the API and one-shot database jobs.
 
-## Production Checks
+## Database migrations
 
-Run these from `/home/sebastian/mocca` on the server:
-
-```bash
-docker compose --env-file .env.production -f compose.production.yaml ps
-docker compose --env-file .env.production -f compose.production.yaml logs --tail 100 api
-docker compose --env-file .env.production -f compose.production.yaml logs --tail 100 postgres
-docker compose --env-file .env.production -f compose.production.yaml restart api
-curl -fsS https://mocca-api.sebastianamartinez.com/health
-```
-
-Only Caddy publishes ports 80 and 443. PostgreSQL has a persistent Docker volume and stays on the internal `backend` network shared by the API and one-shot database jobs. Caddy uses the separate `edge` network and cannot connect directly to PostgreSQL.
-
-## Database
-
-Review Drizzle migration SQL and take a backup before a production migration. Recreate or update the runtime role when needed, then apply migrations as a separate operation:
+Review generated Drizzle SQL and verify a recent backup before any production migration. The runtime uses the restricted `mocca_app` role; the setup profile creates or updates it using the PostgreSQL administrator credentials. Then apply migrations separately:
 
 ```bash
 docker compose --env-file .env.production -f compose.production.yaml --profile setup run --rm db-role
 docker compose --env-file .env.production -f compose.production.yaml --profile migrations run --rm migrate
 ```
 
-Backups live in a private Backblaze B2 bucket. The server reads credentials from root-owned `/etc/mocca-backup.env`; keep its Restic password and `.env.production` recovery copy off-server in a password manager. The daily job stores a custom-format `pg_dump`; the weekly job retains 7 daily, 4 weekly, and 12 monthly snapshots and checks repository data.
+## Backups
 
-For a new or rebuilt server, install Restic 0.17 or newer and `jq`, create `/etc/mocca-backup.env` from the example, and fill in the private B2 bucket, scoped application key, region, and Restic password. Keep the Restic password outside the server as well.
+The backup path is PostgreSQL `pg_dump` -> Restic -> Backblaze B2. `mocca-backup.timer` runs [backup-production.sh](./ops/backup-production.sh) daily; `mocca-backup-prune.timer` runs [prune-production.sh](./ops/prune-production.sh) weekly. The backup is a custom-format dump tagged `postgres`. Pruning retains 7 daily, 4 weekly and 12 monthly snapshots, then checks a data subset.
+
+Both systemd services read root-owned `/etc/mocca-backup.env`. The required settings are `RESTIC_REPOSITORY`, `RESTIC_PASSWORD`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, and `AWS_DEFAULT_REGION`. `COMPOSE_DIR` optionally overrides `/home/sebastian/mocca`. Keep the B2 key scoped to this backup bucket and keep the Restic password and a recovery copy of `.env.production` off-server as well.
+
+To configure backups on a new or rebuilt host, install Restic 0.17 or newer, `jq`, and Docker; create the private environment file from [backup-b2.env.example](./ops/backup-b2.env.example), initialize Restic once, run a backup and isolated restore check, and enable the timers:
 
 ```bash
 sudo install -o root -g root -m 0600 ops/backup-b2.env.example /etc/mocca-backup.env
@@ -116,31 +87,36 @@ sudo systemctl daemon-reload
 sudo systemctl enable --now mocca-backup.timer mocca-backup-prune.timer
 ```
 
-The live host's timers were previously enabled; check them after any server rebuild rather than assuming they survived.
+The restore-check script restores the latest tagged dump into a temporary isolated PostgreSQL container and verifies that it contains public tables; it does not change production data. Check the backup timers after rebuilding a server.
 
-Create a backup or inspect recent backups:
+To run or inspect a backup:
 
 ```bash
 sudo systemctl start mocca-backup.service
 sudo journalctl -u mocca-backup.service
+sudo systemctl list-timers 'mocca-backup*'
 sudo bash -c 'set -a; . /etc/mocca-backup.env; set +a; restic snapshots --tag postgres'
-```
-
-Test that the latest backup restores into an isolated PostgreSQL container. This does not change production data:
-
-```bash
 sudo bash ops/restore-check-production.sh
 ```
 
+## Recovery and rebuild
+
+- **Deployment failed:** inspect the GitHub Actions run and API/Caddy logs. Revert through a pull request, or manually deploy a known-good commit only after verifying the server checkout is clean and the database schema is compatible.
+- **API unavailable:** check Compose status and API, Caddy and PostgreSQL logs. Confirm PostgreSQL is healthy, then restart the API with `"${compose[@]}" restart api` and check the public health endpoint.
+- **PostgreSQL unavailable:** inspect PostgreSQL logs and the persistent volume. Do not remove or recreate the volume. Restore from B2 only after selecting a snapshot and accounting for writes that will be lost.
+- **Server rebuild:** install Docker/Compose, Git, Restic and `jq`; restore the private checkout, `.env.production` and `/etc/mocca-backup.env` from secure copies; reinstall the read-only GitHub deploy key and pinned Actions SSH access; then start the stack, run migrations if needed, configure and verify backups, and check the public health endpoint. Keep the Droplet IP/DNS and Caddy certificate data where possible.
+
 ### Restore PostgreSQL
 
-Restoring overwrites the selected database and loses writes made after that backup. List the snapshots, choose the one to restore, and accept that loss before proceeding:
+This replaces the current production database and loses writes made after the chosen snapshot. Take a fresh backup if possible, verify the target snapshot, and proceed only when that data loss is understood.
+
+List backups and select the snapshot ID:
 
 ```bash
 sudo bash -c 'set -a; . /etc/mocca-backup.env; set +a; restic snapshots --tag postgres'
 ```
 
-Set the selected snapshot ID below and confirm the destructive restore before stopping the API, starting PostgreSQL, and recreating the runtime role from `.env.production`:
+The following first asks for an explicit confirmation, then stops the API, starts PostgreSQL and ensures the runtime role exists:
 
 ```bash
 set -Eeuo pipefail
@@ -156,7 +132,7 @@ compose=(docker compose --env-file .env.production -f compose.production.yaml)
 "${compose[@]}" --profile setup run --rm db-role
 ```
 
-Recreate the empty database and stream the selected dump into it:
+Recreate and restore the selected dump, apply current migrations, and start the stack:
 
 ```bash
 "${compose[@]}" exec -T postgres sh -ec 'dropdb --if-exists -U "$POSTGRES_USER" "$POSTGRES_DB" && createdb -U "$POSTGRES_USER" "$POSTGRES_DB"'
@@ -165,15 +141,20 @@ sudo bash -c 'set -a; . /etc/mocca-backup.env; set +a; restic dump "$1" mocca-po
 "${compose[@]}" exec -T postgres sh -ec 'psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "GRANT USAGE ON SCHEMA public TO mocca_app; GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO mocca_app; GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO mocca_app"'
 "${compose[@]}" --profile migrations run --rm migrate
 "${compose[@]}" up --detach --remove-orphans --wait --wait-timeout 180
+curl -fsS https://mocca-api.sebastianamartinez.com/health
 ```
 
-Verify the API health endpoint and inspect API/PostgreSQL logs before considering recovery complete.
+## Local development
 
-## Recovery
+Requirements are Node.js 24, pnpm 12.5.1, and Docker Compose. Copy the tracked environment examples to ignored `.env` paths, use the same local PostgreSQL password in the root, server and database files, and add development Google/Apple credentials before testing sign-in.
 
-- **Deployment failed:** inspect the failed GitHub Actions run, then `docker compose ... ps` and `logs api`. The deployment does not roll back automatically. Revert the change through a pull request, or deploy a known-good commit manually after checking the server checkout is clean and the database schema is compatible.
-- **API is down:** inspect API and Caddy logs, confirm PostgreSQL is healthy, then restart the API and check `/health`.
-- **PostgreSQL is unavailable:** inspect PostgreSQL logs and volume state; do not remove or recreate its volume. Restore from B2 only after choosing a snapshot and accounting for lost writes.
-- **Server must be rebuilt:** reinstall Docker/Compose, restore the private repository checkout, `.env.production`, and `/etc/mocca-backup.env` from secure copies, reconnect the read-only GitHub deploy key, then follow the PostgreSQL restore procedure. Cloudflare DNS and Caddy certificates can remain unchanged if the server IP is unchanged.
+```bash
+pnpm install
+docker volume create mocca-postgres-data
+docker compose up -d --remove-orphans postgres
+docker compose ps
+pnpm --filter @mocca/server dev
+pnpm --filter @mocca/mobile start
+```
 
-The SeaweedFS container is removed as an orphan on the first simplified deployment. Its named volume is deliberately left behind. Inspect it and delete it manually only after confirming its contents are not needed; future photos should use managed S3-compatible storage such as R2 or B2.
+For a first local database migration, create the `mocca_app` role by connecting with `docker compose exec postgres psql -U postgres -d mocca`, running `CREATE ROLE mocca_app LOGIN;`, then `\password mocca_app`. Generate and review migrations before applying them. Run `pnpm check` for repository validation.

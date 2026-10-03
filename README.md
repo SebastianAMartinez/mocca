@@ -61,7 +61,6 @@ The next priority is not adding more infrastructure. It is building the first us
 - Biome
 - Node.js `node:test`
 - Husky and Commitlint
-- semantic-release
 - GitHub Actions
 - Docker Compose
 
@@ -110,7 +109,7 @@ docker compose up -d --remove-orphans postgres
 docker compose ps
 ```
 
-Copy the tracked environment examples to their ignored `.env` paths, fill in local authentication provider credentials, and keep the files private. `--remove-orphans` stops an old local SeaweedFS container without deleting its volume. The runbook explains the first local database role and migration.
+Copy the tracked environment examples to their ignored `.env` paths, fill in local authentication provider credentials, and keep the files private. `--remove-orphans` stops obsolete containers without deleting their volumes. The runbook explains the first local database role and migration.
 
 Start the API and Expo app in separate terminals:
 
@@ -131,7 +130,14 @@ Direct pushes, force pushes, and deletion of `main` are blocked. Approvals are n
 
 ## Commits and Releases
 
-Commit messages follow the Conventional Commits format and are checked by Commitlint through a Husky `commit-msg` hook. Use Conventional Commit messages for squash-merge pull request titles. After checks and production deployment succeed on `main`, semantic-release creates a `vX.Y.Z` Git tag and GitHub Release with generated notes. `feat` triggers a minor version, `fix` and `perf` trigger a patch, and `BREAKING CHANGE` triggers a major version. Documentation, test, and chore commits do not release by themselves. Private workspace packages are not published to npm.
+Commit messages follow the Conventional Commits format and are checked by Commitlint through a Husky `commit-msg` hook. Use Conventional Commit messages for squash-merge pull request titles. Releases are manual: after preparing a release, create and push a version tag, for example:
+
+```bash
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+Mocca does not publish npm packages or create GitHub releases automatically.
 
 Mobile app versions and iOS build numbers are separate from package versions. EAS will manage build numbers remotely, while human-facing app versions are changed when preparing a release.
 
@@ -264,7 +270,7 @@ The priority is a stable version of the core Mocca experience on both phones. Ne
 
 ## Release Checklist
 
-After checks and deployment succeed on `main`, semantic-release creates the GitHub release and version tag from the Conventional Commit message. Verify the generated release notes; do not create version tags manually.
+Create and push a version tag manually, following the process above.
 
 Before completing a release:
 
@@ -275,6 +281,6 @@ Before completing a release:
 - [ ] Confirm backups are working
 - [ ] Test the mobile build through TestFlight
 - [ ] Update the changelog when applicable
-- [ ] Verify the automatically created GitHub release and tag
+- [ ] Verify the version tag
 
 Deployment and backup procedures are documented in [operations.md](operations.md).

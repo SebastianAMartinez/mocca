@@ -113,36 +113,7 @@ jobs:
             exit 1
           '
           "${compose[@]}" up --detach --remove-orphans --wait --wait-timeout 180
+          curl --fail --silent --show-error --connect-timeout 10 --max-time 20 \
+            --retry 10 --retry-connrefused --retry-delay 2 \
+            https://mocca-api.sebastianamartinez.com/health
           REMOTE
-
-  release:
-    name: Create GitHub release
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    needs:
-      - checks
-      - deploy
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    steps:
-      - name: Check out full history
-        uses: actions/checkout@v7.0.1
-        with:
-          fetch-depth: 0
-
-      - name: Set up pnpm
-        uses: pnpm/action-setup@v6.1.0
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v7.0.0
-        with:
-          node-version: 24
-          cache: pnpm
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Analyze commits and publish release
-        run: pnpm exec semantic-release
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
