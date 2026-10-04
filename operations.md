@@ -231,7 +231,7 @@ pnpm --filter @mocca/server test:integration
 ```
 
 The integration tests reject non-local URLs and database names other than `mocca_test`.
-They create two two-person spaces plus one unpaired user, test shared-space access,
-and delete only their own uniquely identified fixtures afterward. They use synthetic
+They test shared-space access, space creation, invitation creation and acceptance,
+including concurrent requests, and per-user invitation rate limits, and delete only their own uniquely identified fixtures afterward. They use synthetic
 sessions to test the procedure, not the OAuth or cookie-verification flow.
 These tests are separate from `pnpm check` and must be run explicitly for database behavior changes.

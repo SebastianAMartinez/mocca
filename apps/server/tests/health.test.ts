@@ -58,7 +58,7 @@ describe("health route", () => {
 	it("rejects an unauthenticated shared-space request", async () => {
 		const response = await app.inject({
 			method: "GET",
-			url: "/trpc/sharedSpace.getMine",
+			url: "/trpc/sharedSpace.current",
 		});
 
 		assert.equal(response.statusCode, 401);

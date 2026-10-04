@@ -107,6 +107,9 @@ export const sharedSpaceInvitation = pgTable(
 	"shared_space_invitation",
 	{
 		id: text("id").primaryKey(),
+		spaceId: text("space_id")
+			.notNull()
+			.references(() => sharedSpace.id, { onDelete: "cascade" }),
 		codeHash: text("code_hash").notNull(),
 		createdBy: text("created_by")
 			.notNull()
@@ -121,6 +124,7 @@ export const sharedSpaceInvitation = pgTable(
 	(table) => [
 		uniqueIndex("shared_space_invitation_code_hash_unique").on(table.codeHash),
 		index("shared_space_invitation_created_by_idx").on(table.createdBy),
+		uniqueIndex("shared_space_invitation_space_id_unique").on(table.spaceId),
 	],
 );
 

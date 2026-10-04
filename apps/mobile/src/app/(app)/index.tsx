@@ -7,7 +7,7 @@ import { useTRPC } from "@/lib/trpc";
 export default function Index() {
 	const { data: session } = authClient.useSession();
 	const trpc = useTRPC();
-	const spaceQuery = useQuery(trpc.sharedSpace.getMine.queryOptions());
+	const spaceQuery = useQuery(trpc.sharedSpace.current.queryOptions());
 	const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
 	async function handleSignOut() {

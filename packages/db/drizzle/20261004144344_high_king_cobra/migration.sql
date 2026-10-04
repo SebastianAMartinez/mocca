@@ -1,0 +1,3 @@
+ALTER TABLE "shared_space_invitation" ADD COLUMN "space_id" text NOT NULL;--> statement-breakpoint
+CREATE UNIQUE INDEX "shared_space_invitation_space_id_unique" ON "shared_space_invitation" ("space_id");--> statement-breakpoint
+ALTER TABLE "shared_space_invitation" ADD CONSTRAINT "shared_space_invitation_space_id_shared_space_id_fkey" FOREIGN KEY ("space_id") REFERENCES "shared_space"("id") ON DELETE CASCADE;
