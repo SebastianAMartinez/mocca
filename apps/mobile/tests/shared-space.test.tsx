@@ -283,6 +283,33 @@ test("home keeps cached content when a foreground refresh fails", async () => {
 	expect(screen.getByText("Your space is ready")).toBeOnTheScreen();
 });
 
+test("home retains its invitation across failed and successful foreground refreshes", async () => {
+	const api = createApi();
+	api.currentQuery.mockResolvedValue({ sharedSpace, partner: null });
+	const listener = jest.spyOn(AppState, "addEventListener");
+	await render(<HomeScreen />, { wrapper: api.Wrapper });
+	await fireEvent.press(await screen.findByText("Invite your person"));
+	await screen.findByText("Share invitation");
+
+	api.currentQuery.mockRejectedValueOnce(new Error("Offline"));
+	await act(async () => listener.mock.calls[0][1]("active"));
+	await screen.findByText(
+		"Couldn't refresh your space. Your last update is still shown.",
+	);
+	await fireEvent.press(screen.getByText("Share invitation"));
+	await waitFor(() => expect(Share.share).toHaveBeenCalledTimes(1));
+
+	await act(async () => listener.mock.calls[0][1]("active"));
+	await waitFor(() => expect(screen.queryByText("Offline")).toBeNull());
+	await fireEvent.press(screen.getByText("Share invitation"));
+	await waitFor(() => expect(Share.share).toHaveBeenCalledTimes(2));
+	expect(Share.share).toHaveBeenLastCalledWith({
+		title: "Join my Mocca space",
+		message: `Join me on Mocca, a little space for us.\n${invitationLink(token)}`,
+	});
+	expect(api.createInvitation).toHaveBeenCalledTimes(1);
+});
+
 test("sender generates on demand, shares the same link twice, and confirms replacement", async () => {
 	const api = createApi();
 	const pending = deferred<Awaited<ReturnType<typeof api.createInvitation>>>();

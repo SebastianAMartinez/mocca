@@ -1,20 +1,14 @@
-import { Button, Column, Host, RNHostView } from "@expo/ui";
+import { Column, Host } from "@expo/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Stack } from "expo-router";
 import { useEffect } from "react";
-import {
-	ActivityIndicator,
-	AppState,
-	ScrollView,
-	StyleSheet,
-	View,
-} from "react-native";
+import { AppState, ScrollView, StyleSheet } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { AccountMenu } from "@/components/account-menu";
 import { AppText } from "@/components/app-text";
-import { InvitationActions } from "@/components/invitation-actions";
+import { SharedSpaceSection } from "@/components/shared-space-section";
 import { authClient } from "@/lib/auth-client";
-import { buttonStyle, spacing, useAppTheme } from "@/lib/theme";
+import { spacing, useAppTheme } from "@/lib/theme";
 import { useTRPC } from "@/lib/trpc";
 import { fullWidthColumnModifiers } from "@/lib/ui-modifiers";
 import { useSignOut } from "@/lib/use-sign-out";
@@ -102,105 +96,16 @@ const HomeScreen = () => {
 				>
 					<AppText variant="title">{name ? `Hi, ${name}` : "Hi there"}</AppText>
 
-					<Column
-						alignment="start"
-						spacing={spacing.group}
-						testID="shared-space-state"
-					>
-						<AppText variant="caption" tone="secondary">
-							OUR SPACE
-						</AppText>
-						{spaceQuery.isPending ? (
-							<>
-								<RNHostView matchContents>
-									<View style={styles.spinner}>
-										<ActivityIndicator
-											color={palette.secondary}
-											accessibilityLabel="Loading your shared space"
-										/>
-									</View>
-								</RNHostView>
-								<AppText tone="secondary">Loading your shared space...</AppText>
-							</>
-						) : spaceQuery.isError && spaceQuery.data === undefined ? (
-							<>
-								<AppText variant="title">Couldn't load your space</AppText>
-								<AppText tone="secondary">
-									Check your connection and try again.
-								</AppText>
-								<AppText tone="error">{spaceQuery.error.message}</AppText>
-								<Button
-									label={
-										spaceQuery.isFetching ? "Trying again..." : "Try again"
-									}
-									disabled={spaceQuery.isFetching}
-									style={styles.button}
-									onPress={() => void spaceQuery.refetch()}
-								/>
-							</>
-						) : spaceQuery.data === null ? (
-							<>
-								<AppText variant="title">
-									Make a space for the two of you
-								</AppText>
-								<AppText tone="secondary">
-									Create a private space, then invite the person you want to
-									share it with.
-								</AppText>
-								<Button
-									label={
-										createSpace.isPending
-											? "Creating your space..."
-											: "Create a shared space"
-									}
-									style={styles.button}
-									disabled={createSpace.isPending || isSigningOut}
-									testID="create-shared-space"
-									onPress={handleCreateSpace}
-								/>
-								{createSpace.isError ? (
-									<AppText tone="error">
-										{`Couldn't create your space: ${createSpace.error.message}`}
-									</AppText>
-								) : null}
-								<AppText tone="secondary">
-									Already invited? Open the invitation they sent you.
-								</AppText>
-							</>
-						) : spaceQuery.data?.partner === null ? (
-							<>
-								<AppText variant="title">Your space is ready</AppText>
-								<AppText tone="secondary">
-									There's room for your person. Send them an invitation to join.
-								</AppText>
-								<InvitationActions disabled={isSigningOut} />
-							</>
-						) : spaceQuery.data ? (
-							<>
-								<AppText variant="title">
-									{`You and ${spaceQuery.data.partner.name.trim().split(/\s+/)[0]}`}
-								</AppText>
-								<AppText tone="secondary">A little space for us.</AppText>
-							</>
-						) : null}
-						{spaceQuery.isError && spaceQuery.data !== undefined ? (
-							<Column alignment="start" spacing={spacing.small}>
-								<AppText tone="error">
-									Couldn't refresh your space. Your last update is still shown.
-								</AppText>
-								<AppText tone="error">{spaceQuery.error.message}</AppText>
-								<Button
-									label={
-										spaceQuery.isFetching ? "Trying again..." : "Try again"
-									}
-									variant="text"
-									style={styles.button}
-									disabled={spaceQuery.isFetching}
-									onPress={() => void spaceQuery.refetch()}
-								/>
-							</Column>
-						) : null}
-					</Column>
+					<SharedSpaceSection
+						spaceQuery={spaceQuery}
+						isCreating={createSpace.isPending}
+						creationError={
+							createSpace.isError ? createSpace.error.message : null
+						}
+						isSigningOut={isSigningOut}
+						onCreate={handleCreateSpace}
+						onRetry={() => void spaceQuery.refetch()}
+					/>
 					{errorMessage ? (
 						<Column alignment="start" spacing={spacing.small}>
 							<AppText variant="caption" tone="secondary">
@@ -221,9 +126,5 @@ const styles = StyleSheet.create({
 	content: {
 		paddingHorizontal: spacing.screen,
 		paddingTop: spacing.large,
-	},
-	button: buttonStyle,
-	spinner: {
-		paddingVertical: spacing.small,
 	},
 });
