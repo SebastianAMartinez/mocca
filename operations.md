@@ -211,3 +211,27 @@ pnpm --filter @mocca/mobile start
 ```
 
 For a first local database migration, create the `mocca_app` role by connecting with `docker compose exec postgres psql -U postgres -d mocca`, running `CREATE ROLE mocca_app LOGIN;`, then `\password mocca_app`. Generate and review migrations before applying them. Run `pnpm check` for repository validation.
+
+### Local integration test database
+
+Use a separate `mocca_test` database, never development accounts or production data.
+Create it once in the local PostgreSQL container:
+
+```bash
+docker compose exec postgres psql -U postgres -d postgres -c 'CREATE DATABASE mocca_test;'
+```
+
+Set `TEST_DATABASE_URL` privately to a local connection URL for `mocca_test`.
+To migrate it, set `DATABASE_URL` to that same URL in the shell for the migration command
+(using the migration role, not `mocca_app`):
+
+```bash
+DATABASE_URL="$TEST_DATABASE_URL" pnpm --filter @mocca/db db:migrate
+pnpm --filter @mocca/server test:integration
+```
+
+The integration tests reject non-local URLs and database names other than `mocca_test`.
+They create two two-person spaces plus one unpaired user, test shared-space access,
+and delete only their own uniquely identified fixtures afterward. They use synthetic
+sessions to test the procedure, not the OAuth or cookie-verification flow.
+These tests are separate from `pnpm check` and must be run explicitly for database behavior changes.

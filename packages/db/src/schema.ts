@@ -1,5 +1,13 @@
 import { defineRelationsPart } from "drizzle-orm";
-import { boolean, index, pgTable, text, timestamp } from "drizzle-orm/pg-core";
+import {
+	boolean,
+	index,
+	pgTable,
+	primaryKey,
+	text,
+	timestamp,
+	uniqueIndex,
+} from "drizzle-orm/pg-core";
 
 export const user = pgTable("user", {
 	id: text("id").primaryKey(),
@@ -71,6 +79,49 @@ export const verification = pgTable(
 			.notNull(),
 	},
 	(table) => [index("verification_identifier_idx").on(table.identifier)],
+);
+
+export const sharedSpace = pgTable("shared_space", {
+	id: text("id").primaryKey(),
+	createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const sharedSpaceMembership = pgTable(
+	"shared_space_membership",
+	{
+		spaceId: text("space_id")
+			.notNull()
+			.references(() => sharedSpace.id, { onDelete: "cascade" }),
+		userId: text("user_id")
+			.notNull()
+			.references(() => user.id, { onDelete: "restrict" }),
+		createdAt: timestamp("created_at").defaultNow().notNull(),
+	},
+	(table) => [
+		primaryKey({ columns: [table.spaceId, table.userId] }),
+		uniqueIndex("shared_space_membership_user_id_unique").on(table.userId),
+	],
+);
+
+export const sharedSpaceInvitation = pgTable(
+	"shared_space_invitation",
+	{
+		id: text("id").primaryKey(),
+		codeHash: text("code_hash").notNull(),
+		createdBy: text("created_by")
+			.notNull()
+			.references(() => user.id, { onDelete: "cascade" }),
+		acceptedBy: text("accepted_by").references(() => user.id, {
+			onDelete: "set null",
+		}),
+		createdAt: timestamp("created_at").defaultNow().notNull(),
+		expiresAt: timestamp("expires_at").notNull(),
+		acceptedAt: timestamp("accepted_at"),
+	},
+	(table) => [
+		uniqueIndex("shared_space_invitation_code_hash_unique").on(table.codeHash),
+		index("shared_space_invitation_created_by_idx").on(table.createdBy),
+	],
 );
 
 export const authRelations = defineRelationsPart(
