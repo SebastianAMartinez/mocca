@@ -108,7 +108,7 @@ export const appRouter = t.router({
 				return null;
 			}
 
-			const [partner] = await db
+			const partners = await db
 				.select({
 					id: schema.user.id,
 					name: schema.user.name,
@@ -127,7 +127,7 @@ export const appRouter = t.router({
 				)
 				.limit(1);
 
-			return { sharedSpace: space, partner: partner ?? null };
+			return { sharedSpace: space, partner: partners.at(0) ?? null };
 		}),
 		create: authedProcedure.mutation(async ({ ctx }) => {
 			try {
