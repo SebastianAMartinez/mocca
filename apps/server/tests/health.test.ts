@@ -54,4 +54,14 @@ describe("health route", () => {
 			result: { data: { status: "ok" } },
 		});
 	});
+
+	it("rejects an unauthenticated shared-space request", async () => {
+		const response = await app.inject({
+			method: "GET",
+			url: "/trpc/sharedSpace.getMine",
+		});
+
+		assert.equal(response.statusCode, 401);
+		assert.equal(response.json().error.data.code, "UNAUTHORIZED");
+	});
 });

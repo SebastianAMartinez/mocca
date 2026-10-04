@@ -122,6 +122,15 @@ pnpm --filter @mocca/mobile start
 
 The server development command loads `apps/server/.env`; production deployment uses process environment variables instead. See [operations.md](operations.md) for database migration and production procedures.
 
+### Server tests
+
+`pnpm --filter @mocca/server test` runs HTTP tests without requiring a running database.
+Database integration tests run separately with `pnpm --filter @mocca/server test:integration`
+and require `TEST_DATABASE_URL` pointing to the migrated local `mocca_test` database.
+See [operations.md](operations.md#local-integration-test-database) for setup.
+They exercise real database queries with synthetic authenticated contexts, not Google or Apple sign-in.
+Each run creates unique fixtures and removes only those fixtures afterward.
+
 ## Branch Workflow
 
 `main` is the only long-lived branch. Changes are developed on short-lived branches named for their purpose, such as `feat/expo-mobile`, `fix/note-authorization`, or `chore/update-tooling`.
