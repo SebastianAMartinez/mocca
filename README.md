@@ -122,6 +122,11 @@ pnpm --filter @mocca/mobile start
 
 The server development command loads `apps/server/.env`; production deployment uses process environment variables instead. See [operations.md](operations.md) for database migration and production procedures.
 
+The mobile API providers are scoped to the signed-in user's ID. Signing out or
+switching accounts remounts the providers with a fresh query cache; the previous
+cache is cleared and its active queries are cancelled. Session refreshes for the
+same user keep the existing cache.
+
 ### Server tests
 
 `pnpm --filter @mocca/server test` runs HTTP tests without requiring a running database.
