@@ -127,6 +127,42 @@ switching accounts remounts the providers with a fresh query cache; the previous
 cache is cleared and its active queries are cancelled. Session refreshes for the
 same user keep the existing cache.
 
+The signed-in mobile home screen uses Expo UI controls and shows separate
+loading, error, no-space, waiting-for-partner, and connected states. Users without
+a space can create one, with pending feedback and inline errors. Successful
+creation updates the current-space cache and refreshes it from the server;
+membership conflicts also refresh the query to recover an existing space.
+Users with a one-person space can generate a 24-hour invitation and share it
+through the native share sheet. The link can be shared again without generating
+a new token; replacing a link shown on screen requires confirmation. Creating
+an invitation after reopening the screen also invalidates the previous link.
+Tokens are kept in the session's in-memory state,
+not persisted to device storage.
+
+Invitation links use `mocca://invite?token=...` and require Mocca to be installed;
+there is no web landing page or deferred-install link handling yet. The
+invitation route is available before and after sign-in, preserves the token in
+the OAuth callback, and requires explicit acceptance. The navigator waits for
+initial authentication loading before choosing a screen; leaving an invitation
+while signed out opens sign-in directly. Existing memberships,
+invalid/expired links, and request failures have inline feedback. Acceptance
+refreshes the current-space query before navigating home. Home also refreshes
+when the app returns to the foreground so the sender can see their partner join.
+
+`pnpm --filter @mocca/mobile test` runs Jest/React Native Testing Library
+component tests for space creation, invitation generation/sharing/acceptance,
+sign-in callback preservation, and sign-out. React hooks, React Query, and the
+tRPC client run normally; native rendering, authentication, navigation, and API
+responses are mocked. These do not replace testing deep links and OAuth on two
+devices with different accounts and an installed development build.
+Home emphasizes the "Our space" section, keeps cached space data visible when a
+refresh fails, and exposes sign-out through the native Account menu in the
+header (a direct sign-out action on web, where Expo UI menus are not supported).
+The sign-in screen shares the home screen's Expo UI typography and light/dark
+palette, but uses a centered welcome layout with "A little space for us." and
+lower Google and Apple actions. Apple is listed first on iOS; Google is first
+elsewhere. Pending feedback and inline errors appear below the actions.
+
 ### Server tests
 
 `pnpm --filter @mocca/server test` runs HTTP tests without requiring a running database.
