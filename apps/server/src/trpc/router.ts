@@ -1,14 +1,22 @@
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { db, schema } from "@mocca/db";
-import { initTRPC, TRPCError } from "@trpc/server";
-import { and, count, DrizzleQueryError, eq, ne } from "drizzle-orm";
+import { TRPCError } from "@trpc/server";
+import { and, DrizzleQueryError, eq, ne } from "drizzle-orm";
 import { z } from "zod";
 
-import { leaveSharedSpace } from "../shared-space.js";
-import type { Context } from "./context.js";
-import { createRateLimiter, type RateLimiter } from "./rate-limit.js";
-
-const t = initTRPC.context<Context>().create();
+import {
+	countMembers,
+	findMembership,
+	leaveSharedSpace,
+	lockSharedSpace,
+} from "../shared-space.js";
+import { createRateLimiter } from "./rate-limit.js";
+import {
+	authedProcedure,
+	publicProcedure,
+	rateLimitedProcedure,
+	router,
+} from "./trpc.js";
 
 const INVITATION_TTL_MS = 24 * 60 * 60 * 1000;
 const MAX_SPACE_MEMBERS = 2;
@@ -45,38 +53,6 @@ const alreadyHasSpaceError = () =>
 		message: "User already has a shared space",
 	});
 
-const publicProcedure = t.procedure;
-
-export const authedProcedure = t.procedure.use(async (opts) => {
-	const { ctx } = opts;
-	if (!ctx.session) {
-		throw new TRPCError({ code: "UNAUTHORIZED" });
-	}
-
-	return opts.next({
-		ctx: {
-			user: ctx.session.user,
-		},
-	});
-});
-
-const rateLimitedProcedure = (limiter: RateLimiter) =>
-	authedProcedure.use(async (opts) => {
-		const result = limiter.hit(opts.ctx.user.id);
-		if (!result.allowed) {
-			opts.ctx.res.header(
-				"Retry-After",
-				String(Math.ceil(result.retryAfterMs / 1000)),
-			);
-			throw new TRPCError({
-				code: "TOO_MANY_REQUESTS",
-				message: "Too many attempts. Please try again later.",
-			});
-		}
-
-		return opts.next();
-	});
-
 const createInvitationLimiter = createRateLimiter({
 	limit: 10,
 	windowMs: 60 * 60 * 1000,
@@ -86,11 +62,11 @@ const acceptInvitationLimiter = createRateLimiter({
 	windowMs: 15 * 60 * 1000,
 });
 
-export const appRouter = t.router({
+export const appRouter = router({
 	health: publicProcedure.query(() => {
 		return { status: "ok" as const };
 	}),
-	sharedSpace: t.router({
+	sharedSpace: router({
 		current: authedProcedure.query(async ({ ctx }) => {
 			const [space] = await db
 				.select({
@@ -133,13 +109,7 @@ export const appRouter = t.router({
 		create: authedProcedure.mutation(async ({ ctx }) => {
 			try {
 				return await db.transaction(async (tx) => {
-					const [existingMembership] = await tx
-						.select({ spaceId: schema.sharedSpaceMembership.spaceId })
-						.from(schema.sharedSpaceMembership)
-						.where(eq(schema.sharedSpaceMembership.userId, ctx.user.id))
-						.limit(1);
-
-					if (existingMembership) {
+					if (await findMembership(tx, ctx.user.id)) {
 						throw alreadyHasSpaceError();
 					}
 
@@ -178,11 +148,7 @@ export const appRouter = t.router({
 				const expiresAt = new Date(Date.now() + INVITATION_TTL_MS);
 
 				await db.transaction(async (tx) => {
-					const [membership] = await tx
-						.select({ spaceId: schema.sharedSpaceMembership.spaceId })
-						.from(schema.sharedSpaceMembership)
-						.where(eq(schema.sharedSpaceMembership.userId, ctx.user.id))
-						.limit(1);
+					const membership = await findMembership(tx, ctx.user.id);
 
 					if (!membership) {
 						throw new TRPCError({
@@ -192,20 +158,11 @@ export const appRouter = t.router({
 					}
 
 					// Serializes with acceptInvitation, which must lock the same row.
-					await tx
-						.select({ id: schema.sharedSpace.id })
-						.from(schema.sharedSpace)
-						.where(eq(schema.sharedSpace.id, membership.spaceId))
-						.for("update");
+					await lockSharedSpace(tx, membership.spaceId);
 
-					const [{ memberCount }] = await tx
-						.select({ memberCount: count() })
-						.from(schema.sharedSpaceMembership)
-						.where(
-							eq(schema.sharedSpaceMembership.spaceId, membership.spaceId),
-						);
-
-					if (memberCount >= MAX_SPACE_MEMBERS) {
+					if (
+						(await countMembers(tx, membership.spaceId)) >= MAX_SPACE_MEMBERS
+					) {
 						throw new TRPCError({
 							code: "CONFLICT",
 							message: "This shared space already has two members",
@@ -255,14 +212,7 @@ export const appRouter = t.router({
 						}
 
 						// Serializes with createInvitation and other acceptances.
-						const [sharedSpace] = await tx
-							.select({
-								id: schema.sharedSpace.id,
-								createdAt: schema.sharedSpace.createdAt,
-							})
-							.from(schema.sharedSpace)
-							.where(eq(schema.sharedSpace.id, candidate.spaceId))
-							.for("update");
+						const sharedSpace = await lockSharedSpace(tx, candidate.spaceId);
 
 						// Reread under the lock: the invitation may have been
 						// accepted or replaced while this request was waiting.
@@ -297,22 +247,11 @@ export const appRouter = t.router({
 							});
 						}
 
-						const [existingMembership] = await tx
-							.select({ spaceId: schema.sharedSpaceMembership.spaceId })
-							.from(schema.sharedSpaceMembership)
-							.where(eq(schema.sharedSpaceMembership.userId, ctx.user.id))
-							.limit(1);
-
-						if (existingMembership) {
+						if (await findMembership(tx, ctx.user.id)) {
 							throw alreadyHasSpaceError();
 						}
 
-						const [{ memberCount }] = await tx
-							.select({ memberCount: count() })
-							.from(schema.sharedSpaceMembership)
-							.where(eq(schema.sharedSpaceMembership.spaceId, sharedSpace.id));
-
-						if (memberCount >= MAX_SPACE_MEMBERS) {
+						if ((await countMembers(tx, sharedSpace.id)) >= MAX_SPACE_MEMBERS) {
 							throw invitationUnavailableError();
 						}
 
