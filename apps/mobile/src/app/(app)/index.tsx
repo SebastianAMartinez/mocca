@@ -2,7 +2,7 @@ import { Column, Host } from "@expo/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Stack } from "expo-router";
 import { useEffect } from "react";
-import { AppState, ScrollView, StyleSheet } from "react-native";
+import { Alert, AppState, ScrollView, StyleSheet } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { AccountMenu } from "@/components/account-menu";
 import { AppText } from "@/components/app-text";
@@ -11,6 +11,7 @@ import { authClient } from "@/lib/auth-client";
 import { spacing, useAppTheme } from "@/lib/theme";
 import { useTRPC } from "@/lib/trpc";
 import { fullWidthColumnModifiers } from "@/lib/ui-modifiers";
+import { useDeleteAccount } from "@/lib/use-delete-account";
 import { useSignOut } from "@/lib/use-sign-out";
 
 const HomeScreen = () => {
@@ -39,7 +40,23 @@ const HomeScreen = () => {
 			},
 		}),
 	);
+	const leaveSpace = useMutation(
+		trpc.sharedSpace.leave.mutationOptions({
+			retry: false,
+			onSuccess: async () => {
+				const queryKey = trpc.sharedSpace.current.queryKey();
+				await queryClient.cancelQueries({ queryKey });
+				queryClient.setQueryData(queryKey, () => null);
+				await queryClient.invalidateQueries({ queryKey });
+			},
+		}),
+	);
 	const { signOut, isSigningOut, errorMessage } = useSignOut();
+	const {
+		deleteAccount,
+		isDeleting,
+		errorMessage: deleteErrorMessage,
+	} = useDeleteAccount();
 	const { scheme, palette } = useAppTheme();
 	const insets = useSafeAreaInsets();
 	const name = session?.user.name.trim().split(/\s+/)[0] || session?.user.email;
@@ -52,8 +69,53 @@ const HomeScreen = () => {
 		return () => subscription.remove();
 	}, [refetch]);
 
+	const accountBusy = isSigningOut || isDeleting || leaveSpace.isPending;
+	const accountError =
+		errorMessage ??
+		deleteErrorMessage ??
+		(leaveSpace.isError
+			? `Couldn't leave your space: ${leaveSpace.error.message}`
+			: null);
+	const currentSpace = spaceQuery.data ?? null;
+
+	const confirmLeaveSpace = () => {
+		if (accountBusy || currentSpace === null) return;
+
+		Alert.alert(
+			"Leave this space?",
+			currentSpace.partner
+				? "Your partner keeps the space, but you will no longer be part of it."
+				: "Nobody else is in this space, so it will be deleted.",
+			[
+				{ text: "Cancel", style: "cancel" },
+				{
+					text: "Leave space",
+					style: "destructive",
+					onPress: () => leaveSpace.mutate(),
+				},
+			],
+		);
+	};
+
+	const confirmDeleteAccount = () => {
+		if (accountBusy) return;
+
+		Alert.alert(
+			"Delete your account?",
+			"This permanently deletes your account and removes you from your shared space. This can't be undone.",
+			[
+				{ text: "Cancel", style: "cancel" },
+				{
+					text: "Delete account",
+					style: "destructive",
+					onPress: () => void deleteAccount(),
+				},
+			],
+		);
+	};
+
 	const handleCreateSpace = () => {
-		if (createSpace.isPending || isSigningOut || spaceQuery.data !== null) {
+		if (createSpace.isPending || accountBusy || spaceQuery.data !== null) {
 			return;
 		}
 
@@ -80,6 +142,9 @@ const HomeScreen = () => {
 						<AccountMenu
 							isSigningOut={isSigningOut}
 							onSignOut={() => void signOut()}
+							onLeaveSpace={currentSpace ? confirmLeaveSpace : undefined}
+							onDeleteAccount={confirmDeleteAccount}
+							disabled={isDeleting || leaveSpace.isPending}
 						/>
 					),
 				}}
@@ -102,16 +167,16 @@ const HomeScreen = () => {
 						creationError={
 							createSpace.isError ? createSpace.error.message : null
 						}
-						isSigningOut={isSigningOut}
+						isSigningOut={accountBusy}
 						onCreate={handleCreateSpace}
 						onRetry={() => void spaceQuery.refetch()}
 					/>
-					{errorMessage ? (
+					{accountError ? (
 						<Column alignment="start" spacing={spacing.small}>
 							<AppText variant="caption" tone="secondary">
 								ACCOUNT
 							</AppText>
-							<AppText tone="error">{errorMessage}</AppText>
+							<AppText tone="error">{accountError}</AppText>
 						</Column>
 					) : null}
 				</Column>

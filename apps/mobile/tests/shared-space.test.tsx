@@ -17,6 +17,7 @@ import SignInScreen from "@/components/sign-in-screen";
 import { authClient } from "@/lib/auth-client";
 import { invitationLink, invitationPath } from "@/lib/invitations";
 import { TRPCProvider } from "@/lib/trpc";
+import { useDeleteAccount } from "@/lib/use-delete-account";
 import { useSignOut } from "@/lib/use-sign-out";
 import type { AppRouter } from "../../server/src/trpc/router";
 
@@ -58,6 +59,7 @@ jest.mock("@/lib/auth-client", () => ({
 			isPending: mockSession.isPending,
 		}),
 		signOut: jest.fn(),
+		deleteUser: jest.fn(),
 		signIn: { social: jest.fn() },
 		getSession: jest.fn(),
 	},
@@ -107,6 +109,9 @@ const createApi = () => {
 		token,
 		expiresAt: new Date(Date.now() + 60_000).toISOString(),
 	}));
+	const leave = jest.fn(async () => {
+		current = null;
+	});
 	const acceptInvitation = jest.fn(async (_input: unknown) => {
 		current = {
 			sharedSpace,
@@ -131,6 +136,9 @@ const createApi = () => {
 								break;
 							case "sharedSpace.createInvitation":
 								result = await createInvitation();
+								break;
+							case "sharedSpace.leave":
+								result = await leave();
 								break;
 							case "sharedSpace.acceptInvitation":
 								result = await acceptInvitation(
@@ -182,6 +190,7 @@ const createApi = () => {
 		create,
 		createInvitation,
 		acceptInvitation,
+		leave,
 	};
 };
 
@@ -613,4 +622,84 @@ test("shared sign-out hook displays returned errors and prevents repeated calls 
 	);
 	expect(result.current.errorMessage).toBe("Unable to end session");
 	expect(result.current.isSigningOut).toBe(false);
+});
+
+const pressAlertAction = (alert: jest.SpyInstance, text: string) => {
+	const buttons = alert.mock.calls.at(-1)?.[2] as
+		| { text?: string; onPress?: () => void }[]
+		| undefined;
+	const button = buttons?.find((candidate) => candidate.text === text);
+	if (!button) throw new Error(`Alert has no "${text}" button`);
+	button.onPress?.();
+};
+
+test("members confirm before leaving and then see the create-space state", async () => {
+	const alert = jest.spyOn(Alert, "alert").mockImplementation(() => {});
+	const api = createApi();
+	api.currentQuery.mockResolvedValue({ sharedSpace, partner: null });
+	api.leave.mockImplementationOnce(async () => {
+		api.currentQuery.mockResolvedValue(null);
+	});
+	await render(<HomeScreen />, { wrapper: api.Wrapper });
+	await screen.findByText("Your space is ready");
+
+	await fireEvent.press(screen.getByText("Leave space"));
+	expect(alert).toHaveBeenCalledTimes(1);
+	expect(api.leave).not.toHaveBeenCalled();
+
+	await act(async () => pressAlertAction(alert, "Leave space"));
+	await waitFor(() => expect(api.leave).toHaveBeenCalledTimes(1));
+	await screen.findByText("Make a space for the two of you");
+	expect(screen.queryByText("Leave space")).toBeNull();
+});
+
+test("users without a space cannot leave but can still delete their account", async () => {
+	const api = createApi();
+	await render(<HomeScreen />, { wrapper: api.Wrapper });
+	await screen.findByText("Make a space for the two of you");
+
+	expect(screen.queryByText("Leave space")).toBeNull();
+	expect(screen.getByText("Delete account")).toBeOnTheScreen();
+});
+
+test("deleting an account requires confirmation", async () => {
+	const alert = jest.spyOn(Alert, "alert").mockImplementation(() => {});
+	jest.mocked(authClient.deleteUser).mockResolvedValue({
+		data: { success: true, message: "User deleted" },
+		error: null,
+	});
+	const api = createApi();
+	await render(<HomeScreen />, { wrapper: api.Wrapper });
+	await screen.findByText("Make a space for the two of you");
+
+	await fireEvent.press(screen.getByText("Delete account"));
+	expect(alert).toHaveBeenCalledTimes(1);
+	expect(authClient.deleteUser).not.toHaveBeenCalled();
+
+	await act(async () => pressAlertAction(alert, "Delete account"));
+	await waitFor(() => expect(authClient.deleteUser).toHaveBeenCalledTimes(1));
+});
+
+test("delete-account hook explains an expired session and allows a retry", async () => {
+	jest.mocked(authClient.deleteUser).mockResolvedValueOnce({
+		data: null,
+		error: {
+			status: 400,
+			statusText: "Bad Request",
+			code: "SESSION_EXPIRED",
+			message: "Session expired. Re-authenticate to perform this action.",
+		},
+	});
+	const { result } = await renderHook(() => useDeleteAccount());
+	await act(async () => result.current.deleteAccount());
+	expect(result.current.errorMessage).toMatch(/sign out and sign back in/);
+	expect(result.current.isDeleting).toBe(false);
+
+	jest
+		.mocked(authClient.deleteUser)
+		.mockRejectedValueOnce(new Error("Offline"));
+	await act(async () => result.current.deleteAccount());
+	expect(result.current.errorMessage).toBe(
+		"Unable to delete your account. Please try again.",
+	);
 });
