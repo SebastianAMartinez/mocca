@@ -12,13 +12,13 @@ import type { PropsWithChildren } from "react";
 import { Alert, AppState, Share } from "react-native";
 import HomeScreen from "@/app/(app)";
 import InviteScreen from "@/app/invite";
-import { InvitationActions } from "@/components/invitation-actions";
-import SignInScreen from "@/components/sign-in-screen";
+import { InvitationActions } from "@/components/InvitationActions";
+import SignInScreen from "@/components/SignInScreen";
 import { authClient } from "@/lib/auth-client";
 import { invitationLink, invitationPath } from "@/lib/invitations";
 import { TRPCProvider } from "@/lib/trpc";
-import { useDeleteAccount } from "@/lib/use-delete-account";
-import { useSignOut } from "@/lib/use-sign-out";
+import { useDeleteAccount } from "@/hooks/useDeleteAccount";
+import { useSignOut } from "@/hooks/useSignOut";
 import type { AppRouter } from "../../server/src/trpc/router";
 
 const token = "a".repeat(43);

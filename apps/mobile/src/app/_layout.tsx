@@ -1,7 +1,7 @@
 import { SplashScreen, Stack } from "expo-router";
 import { useEffect } from "react";
 
-import { ApiProvider } from "@/lib/api-provider";
+import { ApiProvider } from "@/components/ApiProvider";
 import { authClient } from "@/lib/auth-client";
 
 SplashScreen.preventAutoHideAsync();

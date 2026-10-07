@@ -9,7 +9,7 @@ import {
 	View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { AppText } from "@/components/app-text";
+import { AppText } from "@/components/AppText";
 import { authClient } from "@/lib/auth-client";
 import { invitationPath } from "@/lib/invitations";
 import { spacing, useAppTheme } from "@/lib/theme";

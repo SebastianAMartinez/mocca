@@ -7,7 +7,7 @@ import {
 } from "@testing-library/react-native";
 import { createTRPCClient, httpLink } from "@trpc/client";
 import { Alert } from "react-native";
-import { InvitationActions } from "@/components/invitation-actions";
+import { InvitationActions } from "@/components/InvitationActions";
 import { TRPCProvider } from "@/lib/trpc";
 import type { AppRouter } from "../../server/src/trpc/router";
 

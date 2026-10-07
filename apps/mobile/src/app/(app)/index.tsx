@@ -4,15 +4,15 @@ import { Stack } from "expo-router";
 import { useEffect } from "react";
 import { Alert, AppState, ScrollView, StyleSheet } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { AccountMenu } from "@/components/account-menu";
-import { AppText } from "@/components/app-text";
-import { SharedSpaceSection } from "@/components/shared-space-section";
+import { AccountMenu } from "@/components/AccountMenu";
+import { AppText } from "@/components/AppText";
+import { SharedSpaceSection } from "@/components/SharedSpaceSection";
 import { authClient } from "@/lib/auth-client";
 import { spacing, useAppTheme } from "@/lib/theme";
 import { useTRPC } from "@/lib/trpc";
 import { fullWidthColumnModifiers } from "@/lib/ui-modifiers";
-import { useDeleteAccount } from "@/lib/use-delete-account";
-import { useSignOut } from "@/lib/use-sign-out";
+import { useDeleteAccount } from "@/hooks/useDeleteAccount";
+import { useSignOut } from "@/hooks/useSignOut";
 
 const HomeScreen = () => {
 	const { data: session } = authClient.useSession();

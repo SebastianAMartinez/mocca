@@ -2,7 +2,7 @@ import { Button, Column } from "@expo/ui";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { Alert, Share } from "react-native";
-import { AppText } from "@/components/app-text";
+import { AppText } from "@/components/AppText";
 import { invitationLink } from "@/lib/invitations";
 import { buttonStyle, spacing } from "@/lib/theme";
 import { useTRPC, type useTRPCClient } from "@/lib/trpc";
