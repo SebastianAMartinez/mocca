@@ -1,21 +1,13 @@
 import { Button, Column, RNHostView } from "@expo/ui";
 import type { UseQueryResult } from "@tanstack/react-query";
-import type { TRPCClientErrorLike } from "@trpc/client";
 import { ActivityIndicator, StyleSheet, View } from "react-native";
 import { AppText } from "@/components/AppText";
 import { InvitationActions } from "@/components/InvitationActions";
 import { buttonStyle, spacing, useAppTheme } from "@/lib/theme";
-import type { useTRPCClient } from "@/lib/trpc";
-import type { AppRouter } from "../../../server/src/trpc/router";
-
-type CurrentSpace = Awaited<
-	ReturnType<
-		ReturnType<typeof useTRPCClient>["sharedSpace"]["current"]["query"]
-	>
->;
+import type { ApiError, CurrentSpace } from "@/lib/trpc";
 
 type SharedSpaceSectionProps = {
-	spaceQuery: UseQueryResult<CurrentSpace, TRPCClientErrorLike<AppRouter>>;
+	spaceQuery: UseQueryResult<CurrentSpace, ApiError>;
 	isCreating: boolean;
 	creationError: string | null;
 	isSigningOut: boolean;

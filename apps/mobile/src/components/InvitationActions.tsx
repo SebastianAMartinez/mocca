@@ -5,15 +5,7 @@ import { Alert, Share } from "react-native";
 import { AppText } from "@/components/AppText";
 import { invitationLink } from "@/lib/invitations";
 import { buttonStyle, spacing } from "@/lib/theme";
-import { useTRPC, type useTRPCClient } from "@/lib/trpc";
-
-type Invitation = Awaited<
-	ReturnType<
-		ReturnType<
-			typeof useTRPCClient
-		>["sharedSpace"]["createInvitation"]["mutate"]
-	>
->;
+import { type Invitation, useTRPC } from "@/lib/trpc";
 
 export const InvitationActions = ({ disabled }: { disabled: boolean }) => {
 	const trpc = useTRPC();
