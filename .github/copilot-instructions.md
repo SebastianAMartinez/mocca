@@ -11,10 +11,9 @@ Do not implement notes, photos, shared spaces, widgets, or later-roadmap feature
 - `apps/mobile`: Expo and React Native UI, navigation, client state, API consumption, and device behavior.
 - `apps/server`: Fastify, tRPC, authentication verification, authorization, validation, and business logic.
 - `packages/db`: Drizzle schema, migrations, database client, and database utilities.
-- `packages/shared`: Contracts and utilities genuinely shared by multiple workspaces.
 - `ops`: Production deployment, backup, restore, and service definitions.
 
-Keep code in the workspace that owns it. Do not use `packages/shared` as a general dumping ground.
+Keep code in the workspace that owns it.
 
 ## Architecture and Security
 
