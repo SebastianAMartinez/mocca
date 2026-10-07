@@ -5,10 +5,15 @@ import { spacing, useAppTheme } from "@/lib/theme";
 export const AccountMenu = ({
 	isSigningOut,
 	onSignOut,
+	onLeaveSpace,
+	onDeleteAccount,
 	disabled = false,
 }: {
 	isSigningOut: boolean;
 	onSignOut: () => void;
+	// Each action only appears when its handler is provided.
+	onLeaveSpace?: () => void;
+	onDeleteAccount?: () => void;
 	disabled?: boolean;
 }) => {
 	const { scheme, palette } = useAppTheme();
@@ -35,6 +40,8 @@ export const AccountMenu = ({
 		);
 	}
 
+	const unavailable = isSigningOut || disabled;
+
 	return (
 		<MenuView
 			title="Account"
@@ -44,13 +51,32 @@ export const AccountMenu = ({
 				{
 					id: "sign-out",
 					title: isSigningOut ? "Signing out..." : "Sign out",
-					attributes: { disabled: isSigningOut || disabled },
+					attributes: { disabled: unavailable },
 				},
+				...(onLeaveSpace
+					? [
+							{
+								id: "leave-space",
+								title: "Leave space",
+								attributes: { disabled: unavailable, destructive: true },
+							},
+						]
+					: []),
+				...(onDeleteAccount
+					? [
+							{
+								id: "delete-account",
+								title: "Delete account",
+								attributes: { disabled: unavailable, destructive: true },
+							},
+						]
+					: []),
 			]}
 			onPressAction={({ nativeEvent }) => {
-				if (nativeEvent.event === "sign-out" && !isSigningOut && !disabled) {
-					onSignOut();
-				}
+				if (unavailable) return;
+				if (nativeEvent.event === "sign-out") onSignOut();
+				if (nativeEvent.event === "leave-space") onLeaveSpace?.();
+				if (nativeEvent.event === "delete-account") onDeleteAccount?.();
 			}}
 		>
 			<View

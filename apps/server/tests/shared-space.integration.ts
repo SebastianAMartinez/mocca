@@ -962,3 +962,202 @@ describe("invitation rate limits database integration", () => {
 		});
 	});
 });
+
+type LeaveResult = { ok: true } | { ok: false; code: string };
+
+const leave = async (session: Context["session"]): Promise<LeaveResult> => {
+	const app = Fastify();
+	app.post("/test", async (req, res) => {
+		const caller = appRouter.createCaller({ req, res, session });
+		try {
+			await caller.sharedSpace.leave();
+			return { ok: true };
+		} catch (error) {
+			if (error instanceof TRPCError) {
+				return { ok: false, code: error.code };
+			}
+			throw error;
+		}
+	});
+
+	try {
+		const response = await app.inject({ method: "POST", url: "/test" });
+		assert.equal(response.statusCode, 200);
+		return response.json<LeaveResult>();
+	} finally {
+		await app.close();
+	}
+};
+
+describe("sharedSpace.leave database integration", () => {
+	const leaveUsers = Array.from({ length: 8 }, (_, index) => ({
+		id: randomUUID(),
+		name: `Leave test user ${index}`,
+		email: `${randomUUID()}@example.test`,
+		emailVerified: true,
+		image: null,
+		createdAt: new Date(),
+		updatedAt: new Date(),
+	}));
+	// leaveUsers[0], [1]: together in leaveSpaces.pair; [0] leaves first.
+	// leaveUsers[2]: alone in leaveSpaces.solo.
+	// leaveUsers[3]: no space.
+	// leaveUsers[4], [5]: together in leaveSpaces.race; both leave at once.
+	// leaveUsers[6], [7]: [6] is alone in leaveSpaces.rejoin and invites [7].
+	const leaveSpaces = {
+		pair: { id: randomUUID(), createdAt: new Date() },
+		solo: { id: randomUUID(), createdAt: new Date() },
+		race: { id: randomUUID(), createdAt: new Date() },
+		rejoin: { id: randomUUID(), createdAt: new Date() },
+	};
+	const memberIdsOf = async (spaceId: string) =>
+		(
+			await db
+				.select({ userId: schema.sharedSpaceMembership.userId })
+				.from(schema.sharedSpaceMembership)
+				.where(eq(schema.sharedSpaceMembership.spaceId, spaceId))
+		).map((row) => row.userId);
+	const spaceExists = async (spaceId: string) =>
+		(
+			await db
+				.select({ id: schema.sharedSpace.id })
+				.from(schema.sharedSpace)
+				.where(eq(schema.sharedSpace.id, spaceId))
+		).length === 1;
+
+	before(async () => {
+		await db.transaction(async (tx) => {
+			await tx.insert(schema.user).values(leaveUsers);
+			await tx.insert(schema.sharedSpace).values(Object.values(leaveSpaces));
+			await tx.insert(schema.sharedSpaceMembership).values([
+				{ userId: leaveUsers[0].id, spaceId: leaveSpaces.pair.id },
+				{ userId: leaveUsers[1].id, spaceId: leaveSpaces.pair.id },
+				{ userId: leaveUsers[2].id, spaceId: leaveSpaces.solo.id },
+				{ userId: leaveUsers[4].id, spaceId: leaveSpaces.race.id },
+				{ userId: leaveUsers[5].id, spaceId: leaveSpaces.race.id },
+				{ userId: leaveUsers[6].id, spaceId: leaveSpaces.rejoin.id },
+			]);
+		});
+	});
+
+	after(async () => {
+		await db.transaction(async (tx) => {
+			await tx.delete(schema.sharedSpaceMembership).where(
+				inArray(
+					schema.sharedSpaceMembership.userId,
+					leaveUsers.map((user) => user.id),
+				),
+			);
+			await tx.delete(schema.sharedSpace).where(
+				inArray(
+					schema.sharedSpace.id,
+					Object.values(leaveSpaces).map((space) => space.id),
+				),
+			);
+			await tx.delete(schema.user).where(
+				inArray(
+					schema.user.id,
+					leaveUsers.map((user) => user.id),
+				),
+			);
+		});
+	});
+
+	it("rejects unauthenticated callers", async () => {
+		assert.deepEqual(await leave(null), { ok: false, code: "UNAUTHORIZED" });
+	});
+
+	it("does nothing for a caller without a space", async () => {
+		assert.deepEqual(await leave(sessionFor(leaveUsers[3])), { ok: true });
+		assert.deepEqual(await membershipsFor(leaveUsers[3].id), []);
+	});
+
+	it("removes the caller but keeps the space for the partner", async () => {
+		const [leaver, partner] = leaveUsers;
+
+		assert.deepEqual(await leave(sessionFor(leaver)), { ok: true });
+
+		assert.deepEqual(await membershipsFor(leaver.id), []);
+		assert.deepEqual(await membershipsFor(partner.id), [
+			{ spaceId: leaveSpaces.pair.id },
+		]);
+		assert.equal(await spaceExists(leaveSpaces.pair.id), true);
+
+		const response = await getCurrent(sessionFor(partner));
+		assert.deepEqual(response.json(), {
+			sharedSpace: {
+				id: leaveSpaces.pair.id,
+				createdAt: leaveSpaces.pair.createdAt.toISOString(),
+			},
+			partner: null,
+		});
+		assert.equal((await getCurrent(sessionFor(leaver))).json(), null);
+	});
+
+	it("is safe to repeat", async () => {
+		assert.deepEqual(await leave(sessionFor(leaveUsers[0])), { ok: true });
+		assert.equal(await spaceExists(leaveSpaces.pair.id), true);
+	});
+
+	it("deletes the space and its invitation when the last member leaves", async () => {
+		const user = leaveUsers[2];
+		assert.equal((await createInvitation(sessionFor(user))).ok, true);
+		assert.equal((await invitationsFor(leaveSpaces.solo.id)).length, 1);
+
+		assert.deepEqual(await leave(sessionFor(user)), { ok: true });
+
+		assert.equal(await spaceExists(leaveSpaces.solo.id), false);
+		assert.deepEqual(await invitationsFor(leaveSpaces.solo.id), []);
+		assert.deepEqual(await membershipsFor(user.id), []);
+	});
+
+	it("leaves no orphan space when both members leave at once", async () => {
+		const results = await Promise.all([
+			leave(sessionFor(leaveUsers[4])),
+			leave(sessionFor(leaveUsers[5])),
+		]);
+
+		assert.deepEqual(results, [{ ok: true }, { ok: true }]);
+		assert.equal(await spaceExists(leaveSpaces.race.id), false);
+		assert.deepEqual(await membershipsFor(leaveUsers[4].id), []);
+		assert.deepEqual(await membershipsFor(leaveUsers[5].id), []);
+	});
+
+	it("keeps the space when the last member leaves while an invitation is accepted", async () => {
+		const [inviter, recipient] = [leaveUsers[6], leaveUsers[7]];
+		const invitation = await createInvitation(sessionFor(inviter));
+		assert.ok(invitation.ok);
+
+		const [leaveResult] = await Promise.all([
+			leave(sessionFor(inviter)),
+			acceptInvitation(sessionFor(recipient), invitation.token),
+		]);
+		assert.deepEqual(leaveResult, { ok: true });
+
+		// Either order is valid, but the space must never exist empty.
+		const members = await memberIdsOf(leaveSpaces.rejoin.id);
+		const exists = await spaceExists(leaveSpaces.rejoin.id);
+		assert.ok(
+			(exists && members.length >= 1) || (!exists && members.length === 0),
+		);
+		assert.deepEqual(await membershipsFor(inviter.id), []);
+	});
+
+	it("lets a user delete their account only after leaving the space", async () => {
+		const user = leaveUsers[3];
+		const space = { id: randomUUID(), createdAt: new Date() };
+		await db.insert(schema.sharedSpace).values(space);
+		await db
+			.insert(schema.sharedSpaceMembership)
+			.values({ userId: user.id, spaceId: space.id });
+
+		await assert.rejects(
+			db.delete(schema.user).where(eq(schema.user.id, user.id)),
+		);
+
+		assert.deepEqual(await leave(sessionFor(user)), { ok: true });
+		await db.delete(schema.user).where(eq(schema.user.id, user.id));
+
+		assert.equal(await spaceExists(space.id), false);
+	});
+});

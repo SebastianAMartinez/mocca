@@ -2,7 +2,10 @@ import { drizzleAdapter } from "@better-auth/drizzle-adapter/relations-v2";
 import { expo } from "@better-auth/expo";
 import { db, schema } from "@mocca/db";
 import { betterAuth } from "better-auth/minimal";
+import { and, eq } from "drizzle-orm";
 import { importPKCS8, SignJWT } from "jose";
+
+import { leaveSharedSpace } from "./shared-space.js";
 
 const requireEnvironmentVariable = (name: string): string => {
 	const value = process.env[name];
@@ -47,6 +50,53 @@ const expoDevelopmentOrigins =
 		? ["exp://", "exp://**", "exp://192.168.*.*:*/**"]
 		: [];
 
+// Apple requires revoking its tokens on account deletion, and a failure here must not block it.
+const revokeAppleTokens = async (userId: string): Promise<void> => {
+	try {
+		const [appleAccount] = await db
+			.select({
+				accessToken: schema.account.accessToken,
+				refreshToken: schema.account.refreshToken,
+			})
+			.from(schema.account)
+			.where(
+				and(
+					eq(schema.account.userId, userId),
+					eq(schema.account.providerId, "apple"),
+				),
+			)
+			.limit(1);
+
+		const token = appleAccount?.refreshToken ?? appleAccount?.accessToken;
+		if (!token) return;
+
+		const response = await fetch("https://appleid.apple.com/auth/revoke", {
+			method: "POST",
+			headers: { "Content-Type": "application/x-www-form-urlencoded" },
+			body: new URLSearchParams({
+				client_id: appleClientId,
+				client_secret: await generateAppleClientSecret(
+					appleClientId,
+					appleTeamId,
+					appleKeyId,
+					applePrivateKey,
+				),
+				token,
+				token_type_hint: appleAccount.refreshToken
+					? "refresh_token"
+					: "access_token",
+			}),
+			signal: AbortSignal.timeout(5_000),
+		});
+
+		if (!response.ok) {
+			console.error(`Apple token revocation failed with ${response.status}`);
+		}
+	} catch (error) {
+		console.error("Apple token revocation failed", error);
+	}
+};
+
 export const auth = betterAuth({
 	plugins: [expo()],
 	database: drizzleAdapter(db, {
@@ -54,6 +104,16 @@ export const auth = betterAuth({
 		schema,
 	}),
 	baseURL: betterAuthUrl,
+	user: {
+		deleteUser: {
+			enabled: true,
+			// The user must leave their space first because the membership foreign key restricts deletion.
+			beforeDelete: async (user) => {
+				await leaveSharedSpace(user.id);
+				await revokeAppleTokens(user.id);
+			},
+		},
+	},
 	socialProviders: {
 		google: {
 			clientId: googleClientId,
