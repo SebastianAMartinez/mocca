@@ -10,15 +10,17 @@ import { type Invitation, useTRPC } from "@/lib/trpc";
 export const InvitationActions = ({ disabled }: { disabled: boolean }) => {
 	const trpc = useTRPC();
 	const queryClient = useQueryClient();
+	// Kept in state so the previous link stays visible while a replacement is
+	// pending or fails.
+	const [invitation, setInvitation] = useState<Invitation | null>(null);
 	const [expired, setExpired] = useState(false);
 	const [isSharing, setIsSharing] = useState(false);
 	const [shareError, setShareError] = useState<string | null>(null);
 	const createInvitation = useMutation(
 		trpc.sharedSpace.createInvitation.mutationOptions({
 			retry: false,
-			onMutate: (): Invitation | undefined =>
-				createInvitation.data ?? createInvitation.context,
-			onSuccess: () => {
+			onSuccess: (newInvitation) => {
+				setInvitation(newInvitation);
 				setExpired(false);
 				setShareError(null);
 			},
@@ -34,7 +36,6 @@ export const InvitationActions = ({ disabled }: { disabled: boolean }) => {
 			},
 		}),
 	);
-	const invitation = createInvitation.data ?? createInvitation.context;
 	const busy = disabled || createInvitation.isPending || isSharing;
 
 	useEffect(() => {
