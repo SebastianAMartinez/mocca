@@ -4,6 +4,7 @@ import { initTRPC, TRPCError } from "@trpc/server";
 import { and, count, DrizzleQueryError, eq, ne } from "drizzle-orm";
 import { z } from "zod";
 
+import { leaveSharedSpace } from "../shared-space.js";
 import type { Context } from "./context.js";
 import { createRateLimiter, type RateLimiter } from "./rate-limit.js";
 
@@ -166,6 +167,9 @@ export const appRouter = t.router({
 				}
 				throw error;
 			}
+		}),
+		leave: authedProcedure.mutation(async ({ ctx }) => {
+			await leaveSharedSpace(ctx.user.id);
 		}),
 		createInvitation: rateLimitedProcedure(createInvitationLimiter).mutation(
 			async ({ ctx }) => {
