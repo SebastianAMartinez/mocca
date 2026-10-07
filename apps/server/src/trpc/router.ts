@@ -1,6 +1,6 @@
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { db, schema } from "@mocca/db";
-import { initTRPC, TRPCError } from "@trpc/server";
+import { TRPCError } from "@trpc/server";
 import { and, DrizzleQueryError, eq, ne } from "drizzle-orm";
 import { z } from "zod";
 
@@ -10,10 +10,13 @@ import {
 	leaveSharedSpace,
 	lockSharedSpace,
 } from "../shared-space.js";
-import type { Context } from "./context.js";
-import { createRateLimiter, type RateLimiter } from "./rate-limit.js";
-
-const t = initTRPC.context<Context>().create();
+import { createRateLimiter } from "./rate-limit.js";
+import {
+	authedProcedure,
+	publicProcedure,
+	rateLimitedProcedure,
+	router,
+} from "./trpc.js";
 
 const INVITATION_TTL_MS = 24 * 60 * 60 * 1000;
 const MAX_SPACE_MEMBERS = 2;
@@ -50,38 +53,6 @@ const alreadyHasSpaceError = () =>
 		message: "User already has a shared space",
 	});
 
-const publicProcedure = t.procedure;
-
-export const authedProcedure = t.procedure.use(async (opts) => {
-	const { ctx } = opts;
-	if (!ctx.session) {
-		throw new TRPCError({ code: "UNAUTHORIZED" });
-	}
-
-	return opts.next({
-		ctx: {
-			user: ctx.session.user,
-		},
-	});
-});
-
-const rateLimitedProcedure = (limiter: RateLimiter) =>
-	authedProcedure.use(async (opts) => {
-		const result = limiter.hit(opts.ctx.user.id);
-		if (!result.allowed) {
-			opts.ctx.res.header(
-				"Retry-After",
-				String(Math.ceil(result.retryAfterMs / 1000)),
-			);
-			throw new TRPCError({
-				code: "TOO_MANY_REQUESTS",
-				message: "Too many attempts. Please try again later.",
-			});
-		}
-
-		return opts.next();
-	});
-
 const createInvitationLimiter = createRateLimiter({
 	limit: 10,
 	windowMs: 60 * 60 * 1000,
@@ -91,11 +62,11 @@ const acceptInvitationLimiter = createRateLimiter({
 	windowMs: 15 * 60 * 1000,
 });
 
-export const appRouter = t.router({
+export const appRouter = router({
 	health: publicProcedure.query(() => {
 		return { status: "ok" as const };
 	}),
-	sharedSpace: t.router({
+	sharedSpace: router({
 		current: authedProcedure.query(async ({ ctx }) => {
 			const [space] = await db
 				.select({
