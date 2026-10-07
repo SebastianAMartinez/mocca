@@ -1,5 +1,5 @@
 import { MenuView } from "@expo/ui/community/menu";
-import { Pressable, Text, View } from "react-native";
+import { Text, View } from "react-native";
 import { spacing, useAppTheme } from "@/lib/theme";
 
 export const AccountMenu = ({
@@ -24,22 +24,6 @@ export const AccountMenu = ({
 		justifyContent: "center",
 		paddingHorizontal: spacing.group,
 	} as const;
-
-	if (process.env.EXPO_OS === "web") {
-		return (
-			<Pressable
-				accessibilityRole="button"
-				disabled={isSigningOut || disabled}
-				onPress={onSignOut}
-				style={triggerStyle}
-			>
-				<Text style={labelStyle}>
-					{isSigningOut ? "Signing out..." : "Sign out"}
-				</Text>
-			</Pressable>
-		);
-	}
-
 	const unavailable = isSigningOut || disabled;
 
 	return (

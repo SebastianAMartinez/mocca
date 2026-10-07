@@ -50,7 +50,7 @@ jest.mock("@/lib/auth-client", () => {
 	};
 });
 
-jest.mock("@/lib/api-provider", () => ({
+jest.mock("@/components/ApiProvider", () => ({
 	ApiProvider: ({ children }: import("react").PropsWithChildren) => children,
 }));
 
