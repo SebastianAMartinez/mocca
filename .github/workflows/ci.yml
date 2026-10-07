@@ -13,6 +13,22 @@ jobs:
   checks:
     name: Checks and build
     runs-on: ubuntu-latest
+    env:
+      TEST_DATABASE_URL: postgresql://postgres:ci-only-password@localhost:5432/mocca_test
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_DB: mocca_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: ci-only-password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d mocca_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     steps:
       - name: Check out repository
         uses: actions/checkout@v7.0.1
@@ -31,6 +47,14 @@ jobs:
 
       - name: Check formatting, linting, types, and tests
         run: pnpm check
+
+      - name: Migrate test database
+        run: |
+          psql "$TEST_DATABASE_URL" -c 'CREATE ROLE mocca_app NOLOGIN;'
+          DATABASE_URL="$TEST_DATABASE_URL" pnpm --filter @mocca/db db:migrate
+
+      - name: Run server integration tests
+        run: pnpm --filter @mocca/server test:integration
 
       - name: Build server
         run: pnpm --filter @mocca/server build
