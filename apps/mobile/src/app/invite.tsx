@@ -6,12 +6,12 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { AccountMenu } from "@/components/AccountMenu";
 import { AppText } from "@/components/AppText";
 import SignInScreen from "@/components/SignInScreen";
+import { useSignOut } from "@/hooks/useSignOut";
 import { authClient } from "@/lib/auth-client";
 import { parseInvitationToken } from "@/lib/invitations";
 import { buttonStyle, spacing, useAppTheme } from "@/lib/theme";
 import { useTRPC } from "@/lib/trpc";
 import { fullWidthColumnModifiers } from "@/lib/ui-modifiers";
-import { useSignOut } from "@/hooks/useSignOut";
 
 const InviteScreen = () => {
 	const params = useLocalSearchParams();

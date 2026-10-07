@@ -1,5 +1,5 @@
 import { Column, Host } from "@expo/ui";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { Stack } from "expo-router";
 import { useEffect } from "react";
 import { Alert, AppState, ScrollView, StyleSheet } from "react-native";
@@ -7,50 +7,20 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { AccountMenu } from "@/components/AccountMenu";
 import { AppText } from "@/components/AppText";
 import { SharedSpaceSection } from "@/components/SharedSpaceSection";
+import { useDeleteAccount } from "@/hooks/useDeleteAccount";
+import { useLeaveSharedSpace } from "@/hooks/useLeaveSharedSpace";
+import { useSignOut } from "@/hooks/useSignOut";
 import { authClient } from "@/lib/auth-client";
+import { firstName } from "@/lib/firstName";
 import { spacing, useAppTheme } from "@/lib/theme";
 import { useTRPC } from "@/lib/trpc";
 import { fullWidthColumnModifiers } from "@/lib/ui-modifiers";
-import { useDeleteAccount } from "@/hooks/useDeleteAccount";
-import { useSignOut } from "@/hooks/useSignOut";
 
 const HomeScreen = () => {
 	const { data: session } = authClient.useSession();
 	const trpc = useTRPC();
-	const queryClient = useQueryClient();
 	const spaceQuery = useQuery(trpc.sharedSpace.current.queryOptions());
-	const createSpace = useMutation(
-		trpc.sharedSpace.create.mutationOptions({
-			retry: false,
-			onSuccess: async ({ sharedSpace }) => {
-				const queryKey = trpc.sharedSpace.current.queryKey();
-				await queryClient.cancelQueries({ queryKey });
-				queryClient.setQueryData(queryKey, () => ({
-					sharedSpace,
-					partner: null,
-				}));
-				await queryClient.invalidateQueries({ queryKey });
-			},
-			onError: async (error) => {
-				if (error.data?.code === "CONFLICT") {
-					await queryClient.invalidateQueries({
-						queryKey: trpc.sharedSpace.current.queryKey(),
-					});
-				}
-			},
-		}),
-	);
-	const leaveSpace = useMutation(
-		trpc.sharedSpace.leave.mutationOptions({
-			retry: false,
-			onSuccess: async () => {
-				const queryKey = trpc.sharedSpace.current.queryKey();
-				await queryClient.cancelQueries({ queryKey });
-				queryClient.setQueryData(queryKey, () => null);
-				await queryClient.invalidateQueries({ queryKey });
-			},
-		}),
-	);
+	const leaveSpace = useLeaveSharedSpace();
 	const { signOut, isSigningOut, errorMessage } = useSignOut();
 	const {
 		deleteAccount,
@@ -59,7 +29,7 @@ const HomeScreen = () => {
 	} = useDeleteAccount();
 	const { scheme, palette } = useAppTheme();
 	const insets = useSafeAreaInsets();
-	const name = session?.user.name.trim().split(/\s+/)[0] || session?.user.email;
+	const name = session && (firstName(session.user.name) || session.user.email);
 	const { refetch } = spaceQuery;
 
 	useEffect(() => {
@@ -69,7 +39,8 @@ const HomeScreen = () => {
 		return () => subscription.remove();
 	}, [refetch]);
 
-	const accountBusy = isSigningOut || isDeleting || leaveSpace.isPending;
+	const isAccountActionPending =
+		isSigningOut || isDeleting || leaveSpace.isPending;
 	const accountError =
 		errorMessage ??
 		deleteErrorMessage ??
@@ -79,7 +50,7 @@ const HomeScreen = () => {
 	const currentSpace = spaceQuery.data ?? null;
 
 	const confirmLeaveSpace = () => {
-		if (accountBusy || currentSpace === null) return;
+		if (isAccountActionPending || currentSpace === null) return;
 
 		Alert.alert(
 			"Leave this space?",
@@ -98,7 +69,7 @@ const HomeScreen = () => {
 	};
 
 	const confirmDeleteAccount = () => {
-		if (accountBusy) return;
+		if (isAccountActionPending) return;
 
 		Alert.alert(
 			"Delete your account?",
@@ -112,14 +83,6 @@ const HomeScreen = () => {
 				},
 			],
 		);
-	};
-
-	const handleCreateSpace = () => {
-		if (createSpace.isPending || accountBusy || spaceQuery.data !== null) {
-			return;
-		}
-
-		createSpace.mutate();
 	};
 
 	return (
@@ -163,13 +126,7 @@ const HomeScreen = () => {
 
 					<SharedSpaceSection
 						spaceQuery={spaceQuery}
-						isCreating={createSpace.isPending}
-						creationError={
-							createSpace.isError ? createSpace.error.message : null
-						}
-						isSigningOut={accountBusy}
-						onCreate={handleCreateSpace}
-						onRetry={() => void spaceQuery.refetch()}
+						disabled={isAccountActionPending}
 					/>
 					{accountError ? (
 						<Column alignment="start" spacing={spacing.small}>

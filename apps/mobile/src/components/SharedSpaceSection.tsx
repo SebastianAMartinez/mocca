@@ -3,27 +3,27 @@ import type { UseQueryResult } from "@tanstack/react-query";
 import { ActivityIndicator, StyleSheet, View } from "react-native";
 import { AppText } from "@/components/AppText";
 import { InvitationActions } from "@/components/InvitationActions";
+import { useCreateSharedSpace } from "@/hooks/useCreateSharedSpace";
+import { firstName } from "@/lib/firstName";
 import { buttonStyle, spacing, useAppTheme } from "@/lib/theme";
 import type { ApiError, CurrentSpace } from "@/lib/trpc";
 
 type SharedSpaceSectionProps = {
 	spaceQuery: UseQueryResult<CurrentSpace, ApiError>;
-	isCreating: boolean;
-	creationError: string | null;
-	isSigningOut: boolean;
-	onCreate: () => void;
-	onRetry: () => void;
+	disabled: boolean;
 };
 
 export const SharedSpaceSection = ({
 	spaceQuery,
-	isCreating,
-	creationError,
-	isSigningOut,
-	onCreate,
-	onRetry,
+	disabled,
 }: SharedSpaceSectionProps) => {
 	const { palette } = useAppTheme();
+	const createSpace = useCreateSharedSpace();
+	const onRetry = () => void spaceQuery.refetch();
+	const onCreate = () => {
+		if (createSpace.isPending || disabled) return;
+		createSpace.mutate();
+	};
 
 	return (
 		<Column
@@ -69,16 +69,18 @@ export const SharedSpaceSection = ({
 					</AppText>
 					<Button
 						label={
-							isCreating ? "Creating your space..." : "Create a shared space"
+							createSpace.isPending
+								? "Creating your space..."
+								: "Create a shared space"
 						}
 						style={buttonStyle}
-						disabled={isCreating || isSigningOut}
+						disabled={createSpace.isPending || disabled}
 						testID="create-shared-space"
 						onPress={onCreate}
 					/>
-					{creationError !== null ? (
+					{createSpace.isError ? (
 						<AppText tone="error">
-							{`Couldn't create your space: ${creationError}`}
+							{`Couldn't create your space: ${createSpace.error.message}`}
 						</AppText>
 					) : null}
 					<AppText tone="secondary">
@@ -91,12 +93,12 @@ export const SharedSpaceSection = ({
 					<AppText tone="secondary">
 						There's room for your person. Send them an invitation to join.
 					</AppText>
-					<InvitationActions disabled={isSigningOut} />
+					<InvitationActions disabled={disabled} />
 				</>
 			) : spaceQuery.data ? (
 				<>
 					<AppText variant="title">
-						{`You and ${spaceQuery.data.partner.name.trim().split(/\s+/)[0]}`}
+						{`You and ${firstName(spaceQuery.data.partner.name)}`}
 					</AppText>
 					<AppText tone="secondary">A little space for us.</AppText>
 				</>
