@@ -21,7 +21,6 @@ export const InvitationActions = ({ disabled }: { disabled: boolean }) => {
 	const [expired, setExpired] = useState(false);
 	const [isSharing, setIsSharing] = useState(false);
 	const [shareError, setShareError] = useState<string | null>(null);
-	const [confirmReplacement, setConfirmReplacement] = useState(false);
 	const createInvitation = useMutation(
 		trpc.sharedSpace.createInvitation.mutationOptions({
 			retry: false,
@@ -59,16 +58,11 @@ export const InvitationActions = ({ disabled }: { disabled: boolean }) => {
 
 	const generateInvitation = () => {
 		if (busy) return;
-		setConfirmReplacement(false);
 		createInvitation.mutate();
 	};
 
 	const replaceInvitation = () => {
 		if (busy) return;
-		if (process.env.EXPO_OS === "web") {
-			setConfirmReplacement(true);
-			return;
-		}
 		Alert.alert(
 			"Replace your invitation?",
 			"The previous link will stop working. Share the new invitation with your person.",
@@ -109,23 +103,6 @@ export const InvitationActions = ({ disabled }: { disabled: boolean }) => {
 							? "Your invitation has expired. Create a new one to invite your person."
 							: `Invitation ready. Expires ${new Date(invitation.expiresAt).toLocaleString()}.`}
 					</AppText>
-					{confirmReplacement ? (
-						<Column alignment="start" spacing={spacing.small}>
-							<AppText>
-								The previous link will stop working. Create a new invitation?
-							</AppText>
-							<Button
-								label="Replace invitation"
-								disabled={busy}
-								onPress={generateInvitation}
-							/>
-							<Button
-								label="Cancel"
-								variant="text"
-								onPress={() => setConfirmReplacement(false)}
-							/>
-						</Column>
-					) : null}
 					<Button
 						label={isSharing ? "Opening share sheet..." : "Share invitation"}
 						disabled={busy || expired}

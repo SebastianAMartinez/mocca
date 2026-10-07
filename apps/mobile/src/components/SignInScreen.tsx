@@ -118,7 +118,6 @@ const SignInScreen = ({ invitationToken }: { invitationToken?: string }) => {
 									variant="text"
 									style={{
 										...styles.button,
-										height: process.env.EXPO_OS === "web" ? "auto" : undefined,
 										backgroundColor:
 											provider === "apple" ? palette.text : palette.background,
 										borderColor: palette.text,
