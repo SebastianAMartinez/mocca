@@ -1,11 +1,24 @@
-import { createTRPCClient, httpBatchLink } from "@trpc/client";
-import { createTRPCContext } from "@trpc/tanstack-react-query";
+import {
+	createTRPCClient,
+	httpBatchLink,
+	type TRPCClientErrorLike,
+} from "@trpc/client";
+import {
+	createTRPCContext,
+	type inferOutput,
+} from "@trpc/tanstack-react-query";
 import { authClient } from "@/lib/auth-client";
 
 import type { AppRouter } from "../../../server/src/trpc/router";
 
 export const { TRPCProvider, useTRPC, useTRPCClient } =
 	createTRPCContext<AppRouter>();
+
+type Api = ReturnType<typeof useTRPC>;
+
+export type ApiError = TRPCClientErrorLike<AppRouter>;
+export type CurrentSpace = inferOutput<Api["sharedSpace"]["current"]>;
+export type Invitation = inferOutput<Api["sharedSpace"]["createInvitation"]>;
 
 const apiUrl = process.env.EXPO_PUBLIC_API_URL;
 
